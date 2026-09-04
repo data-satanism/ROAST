@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 
 import pytest
 
@@ -85,6 +86,19 @@ def test_config_is_versioned_and_json_round_trips() -> None:
     assert restored == config
 
 
+@pytest.mark.parametrize("field_name", ("datasets", "models", "metrics"))
+def test_suite_config_rejects_empty_plugin_collections(field_name: str) -> None:
+    config = build_config()
+
+    with pytest.raises(SchemaError, match=rf"{field_name} must not be empty"):
+        replace(config, **{field_name: ()})
+
+    payload = config.to_dict()
+    payload[field_name] = []
+    with pytest.raises(SchemaError, match=rf"{field_name} must not be empty"):
+        BenchmarkSuiteConfig.from_dict(payload)
+
+
 def test_result_records_and_manifest_are_versioned_and_round_trip() -> None:
     result = build_result()
 
@@ -112,6 +126,31 @@ def test_events_and_availability_are_versioned() -> None:
     missing_available.pop("available")
     with pytest.raises(SchemaError, match="available is required"):
         Availability.from_dict(missing_available)
+
+
+def test_event_metadata_is_defensively_copied_and_deeply_readonly() -> None:
+    availability_source = {"details": {"dependencies": ["example"]}}
+    event_source = {"details": {"stages": ["load"]}}
+
+    availability = Availability(available=True, metadata=availability_source)
+    event = ProgressEvent(kind="item_started", metadata=event_source)
+
+    availability_source["details"]["dependencies"].append("changed")
+    event_source["details"]["stages"].append("changed")
+
+    assert availability.metadata == {"details": {"dependencies": ("example",)}}
+    assert event.metadata == {"details": {"stages": ("load",)}}
+    assert json.loads(dumps(availability))["metadata"] == {
+        "details": {"dependencies": ["example"]}
+    }
+    assert json.loads(dumps(event))["metadata"] == {
+        "details": {"stages": ["load"]}
+    }
+
+    with pytest.raises(TypeError):
+        availability.metadata["changed"] = True  # type: ignore[index]
+    with pytest.raises(TypeError):
+        event.metadata["details"]["stages"][0] = "changed"  # type: ignore[index,union-attr]
 
 
 def test_unknown_missing_and_non_integer_schema_versions_are_rejected() -> None:
@@ -163,6 +202,36 @@ def test_run_status_must_be_an_enum_instance() -> None:
             value=1.0,
             status="success",  # type: ignore[arg-type]
         )
+
+
+def test_prediction_and_metric_status_default_to_success_when_absent() -> None:
+    result = build_result()
+    prediction_payload = result.predictions[0].to_dict()
+    metric_payload = result.metrics[0].to_dict()
+    prediction_payload.pop("status")
+    metric_payload.pop("status")
+
+    prediction = PredictionRecord.from_dict(prediction_payload)
+    metric = MetricRecord.from_dict(metric_payload)
+
+    assert prediction.status is RunStatus.SUCCESS
+    assert metric.status is RunStatus.SUCCESS
+
+
+def test_record_status_is_validated_when_present() -> None:
+    result = build_result()
+    for record_type, payload in (
+        (PredictionRecord, result.predictions[0].to_dict()),
+        (MetricRecord, result.metrics[0].to_dict()),
+    ):
+        payload["status"] = "unknown"
+        with pytest.raises(SchemaError, match="unknown value"):
+            record_type.from_dict(payload)
+
+    run_payload = result.runs[0].to_dict()
+    run_payload.pop("status")
+    with pytest.raises(SchemaError, match="status is required"):
+        RunRecord.from_dict(run_payload)
 
 
 def test_metric_record_normalizes_numbers_and_rejects_other_json_values() -> None:

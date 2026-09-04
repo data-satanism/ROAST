@@ -1,6 +1,6 @@
 from typing import Protocol, runtime_checkable
 
-from ..core.events import Availability
+from roast.core.events import Availability
 
 
 @runtime_checkable

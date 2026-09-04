@@ -3,9 +3,13 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Generic, TypeVar, cast
 
-from ..core.schema import ReadonlyJSONObject, freeze_json_value
-from ..protocols.task import TaskAdapter
-from .errors import DuplicatePluginError, RegistryError, UnknownPluginError
+from roast.core.schema import ReadonlyJSONObject, freeze_json_value
+from roast.plugins.errors import (
+    DuplicatePluginError,
+    RegistrationError,
+    UnknownPluginError,
+)
+from roast.protocols.task import TaskAdapter
 
 
 T = TypeVar("T")
@@ -21,15 +25,17 @@ class Registry(Generic[T]):
 
     def __init__(self, kind: str = "plugin") -> None:
         if not isinstance(kind, str) or not kind.strip():
-            raise RegistryError("Registry kind must be a non-empty string")
+            raise RegistrationError("Registry kind must be a non-empty string")
         self._kind = kind
         self._factories: dict[str, PluginFactory[T]] = {}
 
     def register(self, name: str, factory: PluginFactory[T]) -> None:
         if not isinstance(name, str) or not name.strip():
-            raise RegistryError(f"{self._kind} name must be a non-empty string")
+            raise RegistrationError(f"{self._kind} name must be a non-empty string")
         if not callable(factory):
-            raise RegistryError(f"Factory for {self._kind} {name!r} must be callable")
+            raise RegistrationError(
+                f"Factory for {self._kind} {name!r} must be callable"
+            )
         if name in self._factories:
             raise DuplicatePluginError(f"{self._kind} {name!r} is already registered")
         self._factories[name] = factory

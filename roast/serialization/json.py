@@ -4,9 +4,9 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ..core.config import BenchmarkSuiteConfig
-from ..core.records import BenchmarkResult
-from ..core.schema import JSONValue, ReadonlyJSONValue, SchemaMixin, to_plain_data
+from roast.core.config import BenchmarkSuiteConfig
+from roast.core.records import BenchmarkResult
+from roast.core.schema import JSONValue, ReadonlyJSONValue, SchemaMixin, to_plain_data
 
 
 def dumps(

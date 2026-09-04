@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Mapping, cast
+from typing import Any, Mapping
 
-from .schema import (
+from roast.core.schema import (
     ReadonlyJSONObject,
     ReadonlyJSONValue,
     SCHEMA_VERSION,
@@ -12,7 +12,6 @@ from .schema import (
     array_value,
     ensure_json_value,
     ensure_schema_version,
-    freeze_json_value,
     number_or_none,
     object_value,
     optional_json_value,
@@ -20,14 +19,13 @@ from .schema import (
     require_schema_version,
     required_json_value,
     require_string,
+    _frozen_json,
+    _frozen_object,
+    _mapping,
+    _name,
 )
-from .config import BenchmarkSuiteConfig
-from .status import RunStatus
-
-
-def _name(value: object, field_name: str) -> None:
-    if not isinstance(value, str) or not value.strip():
-        raise SchemaError(f"{field_name} must be a non-empty string")
+from roast.core.config import BenchmarkSuiteConfig
+from roast.core.status import RunStatus
 
 
 def _status(data: Mapping[str, Any], *, schema_name: str) -> RunStatus:
@@ -36,28 +34,6 @@ def _status(data: Mapping[str, Any], *, schema_name: str) -> RunStatus:
         return RunStatus(value)
     except ValueError as error:
         raise SchemaError(f"{schema_name}.status has an unknown value: {value!r}") from error
-
-
-def _record_mapping(value: object, *, path: str) -> Mapping[str, Any]:
-    if not isinstance(value, Mapping):
-        raise SchemaError(f"{path} must be an object")
-    return value
-
-
-def _frozen_json(value: object, *, path: str) -> ReadonlyJSONValue:
-    ensure_json_value(value, path=path)
-    return freeze_json_value(cast(ReadonlyJSONValue, value), path=path)
-
-
-def _frozen_object(value: object, *, path: str) -> ReadonlyJSONObject:
-    if not isinstance(value, Mapping):
-        raise SchemaError(f"{path} must be an object")
-    frozen = freeze_json_value(dict(value), path=path)
-    if not isinstance(frozen, Mapping):  # pragma: no cover - guarded above
-        raise SchemaError(f"{path} must be an object")
-    return frozen
-
-
 def _validate_items_and_record_ids(
     items: tuple[ItemRecord, ...],
     runs: tuple[RunRecord, ...],
@@ -261,7 +237,11 @@ class PredictionRecord(SchemaMixin):
             item_id=require_string(data, "item_id", schema_name="PredictionRecord"),
             prediction=required_json_value(data, "prediction", schema_name="PredictionRecord"),
             truth=optional_json_value(data, "truth", schema_name="PredictionRecord"),
-            status=_status(data, schema_name="PredictionRecord"),
+            status=(
+                _status(data, schema_name="PredictionRecord")
+                if "status" in data
+                else RunStatus.SUCCESS
+            ),
             coordinates=object_value(data, "coordinates", schema_name="PredictionRecord"),
             metadata=object_value(data, "metadata", schema_name="PredictionRecord"),
             schema_version=require_schema_version(data, schema_name="PredictionRecord"),
@@ -338,7 +318,11 @@ class MetricRecord(SchemaMixin):
             item_id=require_string(data, "item_id", schema_name="MetricRecord"),
             metric_id=require_string(data, "metric_id", schema_name="MetricRecord"),
             value=number_or_none(data, "value", schema_name="MetricRecord"),
-            status=_status(data, schema_name="MetricRecord"),
+            status=(
+                _status(data, schema_name="MetricRecord")
+                if "status" in data
+                else RunStatus.SUCCESS
+            ),
             coordinates=object_value(data, "coordinates", schema_name="MetricRecord"),
             metadata=object_value(data, "metadata", schema_name="MetricRecord"),
             schema_version=require_schema_version(data, schema_name="MetricRecord"),
@@ -430,7 +414,7 @@ class ArtifactManifest(SchemaMixin):
         return cls(
             run_id=require_string(data, "run_id", schema_name="ArtifactManifest"),
             artifacts=tuple(
-                ArtifactRecord.from_dict(_record_mapping(item, path="ArtifactManifest.artifacts[]"))
+                ArtifactRecord.from_dict(_mapping(item, path="ArtifactManifest.artifacts[]"))
                 for item in artifacts
             ),
             metadata=object_value(data, "metadata", schema_name="ArtifactManifest"),
@@ -512,8 +496,8 @@ class BenchmarkResult(SchemaMixin):
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "BenchmarkResult":
-        config = _record_mapping(data.get("config"), path="BenchmarkResult.config")
-        manifest = _record_mapping(
+        config = _mapping(data.get("config"), path="BenchmarkResult.config")
+        manifest = _mapping(
             data.get("artifact_manifest"), path="BenchmarkResult.artifact_manifest"
         )
         items = array_value(data, "items", schema_name="BenchmarkResult", required=True)
@@ -525,21 +509,21 @@ class BenchmarkResult(SchemaMixin):
             task_kind=require_string(data, "task_kind", schema_name="BenchmarkResult"),
             config=BenchmarkSuiteConfig.from_dict(config),
             items=tuple(
-                ItemRecord.from_dict(_record_mapping(item, path="BenchmarkResult.items[]"))
+                ItemRecord.from_dict(_mapping(item, path="BenchmarkResult.items[]"))
                 for item in items
             ),
             runs=tuple(
-                RunRecord.from_dict(_record_mapping(item, path="BenchmarkResult.runs[]"))
+                RunRecord.from_dict(_mapping(item, path="BenchmarkResult.runs[]"))
                 for item in runs
             ),
             predictions=tuple(
                 PredictionRecord.from_dict(
-                    _record_mapping(item, path="BenchmarkResult.predictions[]")
+                    _mapping(item, path="BenchmarkResult.predictions[]")
                 )
                 for item in predictions
             ),
             metrics=tuple(
-                MetricRecord.from_dict(_record_mapping(item, path="BenchmarkResult.metrics[]"))
+                MetricRecord.from_dict(_mapping(item, path="BenchmarkResult.metrics[]"))
                 for item in metrics
             ),
             artifact_manifest=ArtifactManifest.from_dict(manifest),

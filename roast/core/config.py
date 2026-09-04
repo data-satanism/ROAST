@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Mapping, cast
+from typing import Any, Mapping
 
-from .schema import (
+from roast.core.schema import (
     ReadonlyJSONObject,
     SCHEMA_VERSION,
     SchemaError,
@@ -11,40 +11,16 @@ from .schema import (
     array_value,
     boolean_value,
     ensure_schema_version,
-    freeze_json_value,
     integer_value,
     object_value,
     optional_string,
     require_schema_version,
     require_string,
+    _frozen_object,
+    _mapping,
+    _name,
+    _string_default,
 )
-
-
-def _frozen_object(value: Mapping[str, Any], *, path: str) -> ReadonlyJSONObject:
-    if not isinstance(value, Mapping):
-        raise SchemaError(f"{path} must be an object")
-    frozen = freeze_json_value(dict(value), path=path)
-    return cast(ReadonlyJSONObject, frozen)
-
-
-def _name(value: object, field_name: str) -> None:
-    if not isinstance(value, str) or not value.strip():
-        raise SchemaError(f"{field_name} must be a non-empty string")
-
-
-def _mapping(value: object, *, path: str) -> Mapping[str, Any]:
-    if not isinstance(value, Mapping):
-        raise SchemaError(f"{path} must be an object")
-    return value
-
-
-def _string_default(
-    data: Mapping[str, Any], key: str, *, schema_name: str, default: str
-) -> str:
-    value = data.get(key, default)
-    if not isinstance(value, str):
-        raise SchemaError(f"{schema_name}.{key} must be a string")
-    return value
 
 
 @dataclass(frozen=True)
@@ -329,6 +305,15 @@ class BenchmarkSuiteConfig(SchemaMixin):
             raise SchemaError("BenchmarkSuiteConfig.models must contain ModelSpec values")
         if any(not isinstance(spec, MetricSpec) for spec in metrics):
             raise SchemaError("BenchmarkSuiteConfig.metrics must contain MetricSpec values")
+        for field_name, specs in (
+            ("datasets", datasets),
+            ("models", models),
+            ("metrics", metrics),
+        ):
+            if not specs:
+                raise SchemaError(
+                    f"BenchmarkSuiteConfig.{field_name} must not be empty"
+                )
         if not isinstance(self.artifacts, ArtifactSpec):
             raise SchemaError("BenchmarkSuiteConfig.artifacts must be an ArtifactSpec")
         if not isinstance(self.run, RunSpec):

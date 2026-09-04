@@ -3,13 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 
-from .schema import (
-    JSONObject,
+from roast.core.schema import (
+    ReadonlyJSONObject,
     SCHEMA_VERSION,
     SchemaError,
     SchemaMixin,
+    _frozen_object,
     boolean_value,
-    ensure_json_value,
     ensure_schema_version,
     object_value,
     optional_integer,
@@ -31,7 +31,7 @@ class Availability(SchemaMixin):
 
     available: bool
     reason: str = ""
-    metadata: JSONObject = field(default_factory=dict)
+    metadata: ReadonlyJSONObject = field(default_factory=dict)
     schema_version: int = SCHEMA_VERSION
 
     def __post_init__(self) -> None:
@@ -40,7 +40,11 @@ class Availability(SchemaMixin):
             raise SchemaError("Availability.available must be a boolean")
         if not isinstance(self.reason, str):
             raise SchemaError("Availability.reason must be a string")
-        ensure_json_value(self.metadata, path="Availability.metadata")
+        object.__setattr__(
+            self,
+            "metadata",
+            _frozen_object(self.metadata, path="Availability.metadata"),
+        )
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "Availability":
@@ -77,7 +81,7 @@ class ProgressEvent(SchemaMixin):
     current: int | None = None
     total: int | None = None
     message: str = ""
-    metadata: JSONObject = field(default_factory=dict)
+    metadata: ReadonlyJSONObject = field(default_factory=dict)
     schema_version: int = SCHEMA_VERSION
 
     def __post_init__(self) -> None:
@@ -94,7 +98,11 @@ class ProgressEvent(SchemaMixin):
             raise SchemaError("ProgressEvent.total must not be negative")
         if not isinstance(self.message, str):
             raise SchemaError("ProgressEvent.message must be a string")
-        ensure_json_value(self.metadata, path="ProgressEvent.metadata")
+        object.__setattr__(
+            self,
+            "metadata",
+            _frozen_object(self.metadata, path="ProgressEvent.metadata"),
+        )
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ProgressEvent":

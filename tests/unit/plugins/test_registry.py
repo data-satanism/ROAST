@@ -5,7 +5,7 @@ import pytest
 from examples.custom_plugins import NumericPredictionTask
 from roast.plugins.errors import (
     DuplicatePluginError,
-    RegistryError,
+    RegistrationError,
     UnknownPluginError,
 )
 from roast.plugins.registry import Registry, TaskKindRegistry
@@ -27,23 +27,28 @@ def test_registry_rejects_duplicate_names() -> None:
     registry: Registry[object] = Registry("example plugin")
     registry.register("example.one", lambda options: object())
 
-    with pytest.raises(DuplicatePluginError, match="already registered"):
+    with pytest.raises(DuplicatePluginError, match="already registered") as error:
         registry.register("example.one", lambda options: object())
+
+    assert isinstance(error.value, ValueError)
+    assert not isinstance(error.value, LookupError)
 
 
 def test_registry_reports_unknown_names_and_available_plugins() -> None:
     registry: Registry[object] = Registry("example plugin")
     registry.register("example.available", lambda options: object())
 
-    with pytest.raises(UnknownPluginError, match="example.available"):
+    with pytest.raises(UnknownPluginError, match="example.available") as error:
         registry.get("missing")
+
+    assert isinstance(error.value, LookupError)
 
 
 def test_registry_rejects_invalid_names_and_factories() -> None:
     registry: Registry[object] = Registry("example plugin")
-    with pytest.raises(RegistryError, match="non-empty"):
+    with pytest.raises(RegistrationError, match="non-empty"):
         registry.register("", lambda options: object())
-    with pytest.raises(RegistryError, match="callable"):
+    with pytest.raises(RegistrationError, match="callable"):
         registry.register("broken", object())  # type: ignore[arg-type]
 
 

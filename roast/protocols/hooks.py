@@ -1,11 +1,9 @@
 from typing import Protocol, runtime_checkable
 
-from ..core.events import ProgressEvent
-from ..core.schema import (
+from roast.core.events import ProgressEvent
+from roast.core.schema import (
     JSONObject,
-    JSONValue,
     ReadonlyJSONObject,
-    ReadonlyJSONValue,
 )
 
 

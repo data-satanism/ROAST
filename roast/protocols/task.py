@@ -3,14 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Protocol, runtime_checkable
 
-from ..core.records import ItemRecord
-from ..core.schema import (
+from roast.core.records import ItemRecord
+from roast.core.schema import (
     JSONValue,
     ReadonlyJSONObject,
     ensure_json_value,
     freeze_json_value,
 )
-from .model import ModelAdapter
+from roast.protocols.model import ModelAdapter
 
 
 @dataclass(frozen=True)

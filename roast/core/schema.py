@@ -196,6 +196,38 @@ def freeze_json_value(
     return cast(JSONScalar, value)
 
 
+def _frozen_json(value: object, *, path: str) -> ReadonlyJSONValue:
+    ensure_json_value(value, path=path)
+    return freeze_json_value(cast(ReadonlyJSONValue, value), path=path)
+
+
+def _frozen_object(value: Mapping[str, Any], *, path: str) -> ReadonlyJSONObject:
+    if not isinstance(value, Mapping):
+        raise SchemaError(f"{path} must be an object")
+    frozen = freeze_json_value(dict(value), path=path)
+    return cast(ReadonlyJSONObject, frozen)
+
+
+def _name(value: object, field_name: str) -> None:
+    if not isinstance(value, str) or not value.strip():
+        raise SchemaError(f"{field_name} must be a non-empty string")
+
+
+def _mapping(value: object, *, path: str) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping):
+        raise SchemaError(f"{path} must be an object")
+    return value
+
+
+def _string_default(
+    data: Mapping[str, Any], key: str, *, schema_name: str, default: str
+) -> str:
+    value = data.get(key, default)
+    if not isinstance(value, str):
+        raise SchemaError(f"{schema_name}.{key} must be a string")
+    return value
+
+
 def to_plain_data(value: Any) -> JSONValue:
     """Convert a public ROAST value to strict, JSON-friendly Python data."""
     if is_dataclass(value):

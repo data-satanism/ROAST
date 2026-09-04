@@ -3,9 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Protocol, runtime_checkable
 
-from ..core.config import MetricSpec
-from ..core.records import ItemRecord
-from ..core.schema import (
+from roast.core.config import MetricSpec
+from roast.core.records import ItemRecord
+from roast.core.schema import (
     JSONValue,
     ReadonlyJSONObject,
     ensure_json_value,
