@@ -9,6 +9,7 @@ from examples.custom_plugins import (
     ScaleModel,
     build_registries,
 )
+from roast.execution.artifacts import ErrorArtifactSink
 from roast.protocols.dataset import DatasetProvider
 from roast.protocols.hooks import ProgressHook, ResumeStore
 from roast.protocols.metric import Metric
@@ -41,6 +42,7 @@ def test_all_public_protocol_annotations_are_runtime_resolvable() -> None:
         ProgressHook.on_event,
         ResumeStore.load,
         ResumeStore.save,
+        ErrorArtifactSink.persist_errors,
     )
 
     for method in methods:

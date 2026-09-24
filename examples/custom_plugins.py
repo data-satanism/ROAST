@@ -15,6 +15,7 @@ from roast.core.config import (
 from roast.core.events import Availability
 from roast.core.records import ItemRecord
 from roast.core.schema import ReadonlyJSONObject
+from roast.execution.orchestrator import PluginRegistries, run_suite
 from roast.plugins.registry import Registry, TaskKindRegistry
 from roast.protocols.dataset import DatasetProvider
 from roast.protocols.metric import Metric, MetricInput
@@ -177,10 +178,14 @@ def build_config(output_uri: str = "benchmark-results") -> BenchmarkSuiteConfig:
 
 
 def main() -> None:
-    """Print the contract-only example configuration as JSON."""
+    """Run the example and print its result as JSON."""
 
-    build_registries()
-    print(dumps(build_config()))
+    datasets, models, metrics, tasks = build_registries()
+    result = run_suite(
+        build_config(),
+        PluginRegistries(datasets, models, metrics, tasks),
+    )
+    print(dumps(result))
 
 
 if __name__ == "__main__":
