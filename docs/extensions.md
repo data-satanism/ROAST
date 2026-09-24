@@ -1,38 +1,42 @@
-# BMF-101 extension points
+# Extension points
 
 ```text
 config -> registered plugin contracts -> orchestrator -> artifacts -> compare
                                       BMF-102       BMF-106      BMF-108
 ```
 
-BMF-101 defines the contracts across this mental model. It does not implement the
-suite lifecycle, persistence layout, or comparison algorithms.
+BMF-101 defines the dataset, model, metric, and task extension points. BMF-102 keeps
+those contracts and adds optional progress, resume, and error-artifact integration
+points around suite execution. This document describes extension contracts; the
+orchestrator lifecycle and execution policies are documented in
+[`execution.md`](execution.md).
 
 ## Extension catalog
 
-| Extension | Public Protocol | BMF-101 registration surface |
-|---|---|---|
-| Dataset | `DatasetProvider` | `Registry[DatasetProvider]` |
-| Model | `ModelAdapter` | `Registry[ModelAdapter]` |
-| Metric | `Metric` | `Registry[Metric]` |
-| Task kind | `TaskAdapter` | `TaskKindRegistry` |
-| Progress | `ProgressHook` | Optional Protocol only |
-| Resume | `ResumeStore` | Optional Protocol only |
+| Extension | Public contract | Integration surface | Introduced |
+|---|---|---|---|
+| Dataset | `DatasetProvider` | `Registry[DatasetProvider]` | BMF-101 |
+| Model | `ModelAdapter` | `Registry[ModelAdapter]` | BMF-101 |
+| Metric | `Metric` | `Registry[Metric]` | BMF-101 |
+| Task kind | `TaskAdapter` | `TaskKindRegistry` | BMF-101 |
+| Progress | `ProgressHook` | Optional `run_suite` argument | BMF-102 |
+| Resume | `ResumeStore` | Optional `run_suite` argument | BMF-102 |
+| Error artifact | `ErrorArtifactSink` | Optional `run_suite` argument | BMF-102 |
 
 
-The current API intentionally has one specialized registry and three uses of the
-generic registry:
+The current API has one specialized registry and three uses of the generic
+registry:
 
-| Extension | Current registry | Reason in the current PR | Future PR |
+| Extension | Current registry | Current responsibility | Future work |
 |---|---|---|---|
 | Dataset | `Registry[DatasetProvider]` | BMF-101 defines only the provider contract | BMF-103 adds `DatasetProviderRegistry` |
 | Model | `Registry[ModelAdapter]` | BMF-101 defines only the adapter contract | BMF-104 adds `ModelAdapterRegistry` |
 | Metric | `Registry[Metric]` | BMF-101 defines only the metric contract | BMF-105 adds `MetricRegistry` |
 | Task kind | `TaskKindRegistry` | An extensible task-kind registry is an explicit BMF-101 requirement | Already introduced by BMF-101 |
 
-This is a temporary PR-boundary asymmetry, not a conceptual difference between the
-four plugin types. The BMF-103, BMF-104, and BMF-105 PRs will restore a symmetric
-public surface:
+This is a temporary API asymmetry, not a conceptual difference between the four
+plugin types. BMF-103, BMF-104, and BMF-105 will provide a symmetric public
+surface:
 
 ```python
 datasets = DatasetProviderRegistry()
@@ -91,9 +95,8 @@ are not universal. A task plugin declares its own structural capability, such as
 classifier with `fit/predict` or a forecaster with `forecast`, while still exposing
 the common availability contract.
 
-`ModelSpec.optional` is declarative in BMF-101. Uniform conversion of availability
-into skip/not-available records is implemented and tested in BMF-104 together with
-the specialized model registry.
+Availability gives the execution layer a task-neutral readiness signal. The
+specialized model registry remains a BMF-104 concern.
 
 ## Metric
 
@@ -121,19 +124,21 @@ class TaskAdapter(Protocol):
     ) -> PredictionOutput: ...
 ```
 
-`TaskAdapter` defines only one item's task-specific model invocation and output. It
-does not iterate a suite, create lifecycle records, compute every metric, checkpoint,
-persist artifacts, or assemble leaderboards. Those responsibilities belong to the
-generic orchestrator introduced in BMF-102.
+`TaskAdapter` defines one item's task-specific model invocation and output. Its
+extension boundary deliberately excludes suite-level concerns such as iteration,
+record assembly, checkpoints, and artifact persistence.
 
 The suite config selects the registered implementation using `task_kind` and passes
 opaque JSON `task_options` to its factory.
 
 See [`examples/custom_plugins.py`](../examples/custom_plugins.py) for a complete
-non-Industrial definition of all four mandatory extension types. It includes a
-consumer-owned `NumericModel` capability and requires no changes to ROAST source.
+definition of all four mandatory extension types. It includes a consumer-owned
+`NumericModel` capability and requires no changes to ROAST source.
 
-## Progress and resume hooks
+## BMF-102 lifecycle extension points
+
+The BMF-102 hooks are optional structural protocols. Consumers implement only the
+capabilities they need and pass those implementations to `run_suite`.
 
 `ProgressHook` consumes versioned `ProgressEvent` values:
 
@@ -150,16 +155,30 @@ class ResumeStore(Protocol):
     def save(self, run_id: str, state: ReadonlyJSONObject) -> None: ...
 ```
 
-BMF-101 defines only these optional boundaries. BMF-102 defines when lifecycle
-events and resume calls happen; BMF-106 defines portable, crash-safe checkpoint and
-artifact persistence.
+`ErrorArtifactSink` persists the aggregated error records and returns the artifact
+descriptor contributed to the result:
+
+```python
+class ErrorArtifactSink(Protocol):
+    def persist_errors(
+        self,
+        run_id: str,
+        errors: tuple[ExecutionError, ...],
+        spec: ArtifactSpec,
+    ) -> ArtifactRecord: ...
+```
+
+These contracts do not prescribe logging backends, checkpoint storage, filenames,
+or URI layouts. Their invocation semantics and related policies are defined in
+[`execution.md`](execution.md). BMF-106 will define a portable, crash-safe on-disk
+checkpoint and artifact layout.
 
 ## Config, artifacts, and schema versions
 
 `BenchmarkSuiteConfig` is the single root configuration. Dataset, model, and metric
 specifications select plugins by registered names. `ArtifactSpec` is declarative;
-its `output_uri`, `persist`, and opaque options do not imply that BMF-101 writes any
-files.
+its `output_uri`, `persist`, and opaque options are passed to persistence extension
+points without prescribing a storage implementation.
 
 Every serialized public config, record, result, event, availability value, artifact
 record, and artifact manifest carries `schema_version: 1`. Readers reject a missing
