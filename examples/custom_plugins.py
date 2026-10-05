@@ -16,7 +16,12 @@ from roast.core.events import Availability
 from roast.core.records import ItemRecord
 from roast.core.schema import ReadonlyJSONObject
 from roast.execution.orchestrator import PluginRegistries, run_suite
-from roast.plugins.registry import DatasetProviderRegistry, Registry, TaskKindRegistry
+from roast.plugins.registry import (
+    DatasetProviderRegistry,
+    ModelAdapterRegistry,
+    Registry,
+    TaskKindRegistry,
+)
 from roast.protocols.dataset import DatasetProvider
 from roast.protocols.metric import Metric, MetricInput
 from roast.protocols.model import ModelAdapter
@@ -116,7 +121,7 @@ class NumericPredictionTask:
 
 def build_registries() -> tuple[
     DatasetProviderRegistry,
-    Registry[ModelAdapter],
+    ModelAdapterRegistry,
     Registry[Metric],
     TaskKindRegistry,
 ]:
@@ -127,7 +132,7 @@ def build_registries() -> tuple[
     """
 
     datasets = DatasetProviderRegistry()
-    models: Registry[ModelAdapter] = Registry("model adapter")
+    models = ModelAdapterRegistry()
     metrics: Registry[Metric] = Registry("metric")
     tasks = TaskKindRegistry()
 

@@ -36,10 +36,12 @@ from roast.execution.item import (
 from roast.execution.policy import ExecutionPolicy
 from roast.plugins.registry import (
     DatasetProviderRegistry,
+    ModelAdapterRegistry,
     Registry,
     TaskKindRegistry,
 )
 from roast.plugins.errors import UnknownPluginError
+from roast.protocols.dataset import DatasetProvider
 from roast.protocols.hooks import ProgressHook, ResumeStore
 from roast.protocols.metric import Metric
 from roast.protocols.model import ModelAdapter
@@ -58,7 +60,7 @@ class PluginRegistries:
     """
 
     datasets: DatasetProviderRegistry
-    models: Registry[ModelAdapter]
+    models: ModelAdapterRegistry
     metrics: Registry[Metric]
     tasks: TaskKindRegistry
 
@@ -67,7 +69,9 @@ class PluginRegistries:
             raise TypeError(
                 "PluginRegistries.datasets must be a DatasetProviderRegistry"
             )
-        for field_name in ("models", "metrics", "tasks"):
+        if not isinstance(self.models, ModelAdapterRegistry):
+            raise TypeError("PluginRegistries.models must be a ModelAdapterRegistry")
+        for field_name in ("metrics", "tasks"):
             if not isinstance(getattr(self, field_name), Registry):
                 raise TypeError(f"PluginRegistries.{field_name} must be a Registry")
 

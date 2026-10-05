@@ -11,6 +11,7 @@ from roast.plugins.errors import (
 )
 from roast.protocols.task import TaskAdapter
 from roast.protocols.dataset import DatasetProvider
+from roast.protocols.model import ModelAdapter
 
 
 T = TypeVar("T")
@@ -75,3 +76,10 @@ class DatasetProviderRegistry(Registry[DatasetProvider]):
 
     def __init__(self) -> None:
         super().__init__("dataset provider")
+
+
+class ModelAdapterRegistry(Registry[ModelAdapter]):
+    """Map task-agnostic model adapter names to lazy factories."""
+
+    def __init__(self) -> None:
+        super().__init__("model adapter")

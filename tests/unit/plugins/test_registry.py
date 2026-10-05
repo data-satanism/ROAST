@@ -8,7 +8,12 @@ from roast.plugins.errors import (
     RegistrationError,
     UnknownPluginError,
 )
-from roast.plugins.registry import DatasetProviderRegistry, Registry, TaskKindRegistry
+from roast.plugins.registry import (
+    DatasetProviderRegistry,
+    ModelAdapterRegistry,
+    Registry,
+    TaskKindRegistry,
+)
 
 
 def test_generic_registry_registers_and_creates_plugins() -> None:
@@ -68,5 +73,16 @@ def test_dataset_provider_registry_has_a_specific_public_kind() -> None:
     with pytest.raises(
         UnknownPluginError,
         match=r"registered dataset provider names: external\.memory",
+    ):
+        registry.get("missing")
+
+
+def test_model_adapter_registry_has_a_specific_public_kind() -> None:
+    registry = ModelAdapterRegistry()
+    registry.register("external.lazy_model", lambda options: object())  # type: ignore[arg-type]
+
+    with pytest.raises(
+        UnknownPluginError,
+        match=r"registered model adapter names: external\.lazy_model",
     ):
         registry.get("missing")

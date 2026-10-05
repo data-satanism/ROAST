@@ -16,7 +16,7 @@ orchestrator lifecycle and execution policies are documented in
 | Extension | Public contract | Integration surface | Introduced |
 |---|---|---|---|
 | Dataset | `DatasetProvider` | `DatasetProviderRegistry` | BMF-103 |
-| Model | `ModelAdapter` | `Registry[ModelAdapter]` | BMF-101 |
+| Model | `ModelAdapter` | `ModelAdapterRegistry` | BMF-104 |
 | Metric | `Metric` | `Registry[Metric]` | BMF-101 |
 | Task kind | `TaskAdapter` | `TaskKindRegistry` | BMF-101 |
 | Progress | `ProgressHook` | Optional `run_suite` argument | BMF-102 |
@@ -24,19 +24,19 @@ orchestrator lifecycle and execution policies are documented in
 | Error artifact | `ErrorArtifactSink` | Optional `run_suite` argument | BMF-102 |
 
 
-The current API has one specialized registry and three uses of the generic
-registry:
+The current API has specialized registries for datasets and models, plus two uses
+of the generic registry:
 
 | Extension | Current registry | Current responsibility | Future work |
 |---|---|---|---|
 | Dataset | `DatasetProviderRegistry` | Provider name resolution and opaque provider options | BMF-103 implemented |
-| Model | `Registry[ModelAdapter]` | BMF-101 defines only the adapter contract | BMF-104 adds `ModelAdapterRegistry` |
+| Model | `ModelAdapterRegistry` | Adapter name resolution and opaque adapter options | BMF-104 implemented |
 | Metric | `Registry[Metric]` | BMF-101 defines only the metric contract | BMF-105 adds `MetricRegistry` |
 | Task kind | `TaskKindRegistry` | An extensible task-kind registry is an explicit BMF-101 requirement | Already introduced by BMF-101 |
 
-This is a temporary API asymmetry, not a conceptual difference between the four
-plugin types. BMF-103, BMF-104, and BMF-105 will provide a symmetric public
-surface:
+This temporary API asymmetry is not a conceptual difference between the four plugin
+types. BMF-105 will complete the symmetric public surface by adding
+`MetricRegistry`:
 
 ```python
 datasets = DatasetProviderRegistry()
@@ -45,8 +45,8 @@ metrics = MetricRegistry()
 tasks = TaskKindRegistry()
 ```
 
-The future specialized registries will reuse or extend `Registry[T]`; they will not
-replace its common name-to-factory behavior.
+The specialized registries reuse `Registry[T]`; they do not replace its common
+name-to-factory behavior.
 
 ## Generic registration
 
@@ -56,12 +56,13 @@ immutable `ReadonlyJSONObject` options and returns one Protocol implementation.
 ```python
 from roast.plugins.registry import (
     DatasetProviderRegistry,
+    ModelAdapterRegistry,
     Registry,
     TaskKindRegistry,
 )
 
 datasets = DatasetProviderRegistry()
-models = Registry("model adapter")
+models = ModelAdapterRegistry()
 metrics = Registry("metric")
 tasks = TaskKindRegistry()
 
@@ -160,7 +161,93 @@ classifier with `fit/predict` or a forecaster with `forecast`, while still expos
 the common availability contract.
 
 Availability gives the execution layer a task-neutral readiness signal. The
-specialized model registry remains a BMF-104 concern.
+task-specific protocol determines the actual operation shape, such as
+`predict_number()`, `predict()`, or `forecast()`.
+
+### Register an adapter with the Python API
+
+A third-party model package can implement the common availability contract and a
+capability required by its selected task kind. Register its class or factory under
+a stable name; no ROAST source changes are required:
+
+```python
+from roast.core.events import Availability
+from roast.core.records import ItemRecord
+from roast.core.schema import ReadonlyJSONObject
+from roast.plugins.registry import ModelAdapterRegistry
+
+
+class ScaleModel:
+    def __init__(self, options: ReadonlyJSONObject) -> None:
+        factor = options.get("factor", 1.0)
+        self._factor = float(factor)
+
+    def availability(self) -> Availability:
+        return Availability(available=True)
+
+    def predict_number(self, item: ItemRecord) -> float:
+        return float(item.payload) * self._factor
+
+
+models = ModelAdapterRegistry()
+models.register("example.scale", ScaleModel)
+```
+
+Select the registered adapter through `ModelSpec`. Adapter options remain owned by
+the third-party factory:
+
+```python
+from roast.core.config import ModelSpec, PluginSpec
+
+model = ModelSpec(
+    model_id="double",
+    adapter=PluginSpec(
+        name="example.scale",
+        options={"factor": 2},
+    ),
+    tags=("reference",),
+)
+```
+
+Pass this `ModelAdapterRegistry` in `PluginRegistries` when calling `run_suite`.
+The complete executable example is available in
+[`examples/custom_plugins.py`](../examples/custom_plugins.py).
+
+### Availability behavior
+
+Every model adapter returns an `Availability` value before item execution. ROAST
+uses one task-neutral mapping when `available` is false:
+
+| `ModelSpec.optional` | Run status |
+|---|---|
+| `True` | `skipped` |
+| `False` | `not_available` |
+
+The adapter should put a human-readable explanation in `Availability.reason`.
+Exceptions raised by the factory or `availability()` are recorded as failures, not
+as unavailable models.
+
+### Optional dependencies and lazy factories
+
+Registration accepts any callable with the same shape as a model constructor. A
+plugin can therefore defer an optional import until ROAST actually creates the
+selected adapter:
+
+```python
+from roast.core.schema import ReadonlyJSONObject
+
+
+def sklearn_factory(options: ReadonlyJSONObject):
+    from my_sklearn_plugin import SklearnAdapter
+
+    return SklearnAdapter(options)
+
+
+models.register("example.sklearn", sklearn_factory)
+```
+
+Keep optional imports inside the factory so importing the plugin registration
+module does not require every supported model library to be installed.
 
 ## Metric
 
