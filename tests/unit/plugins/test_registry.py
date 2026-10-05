@@ -8,7 +8,7 @@ from roast.plugins.errors import (
     RegistrationError,
     UnknownPluginError,
 )
-from roast.plugins.registry import Registry, TaskKindRegistry
+from roast.plugins.registry import DatasetProviderRegistry, Registry, TaskKindRegistry
 
 
 def test_generic_registry_registers_and_creates_plugins() -> None:
@@ -59,3 +59,14 @@ def test_task_kind_registry_uses_arbitrary_string_names() -> None:
     task = registry.create("external.numeric_prediction", {})
 
     assert isinstance(task, NumericPredictionTask)
+
+
+def test_dataset_provider_registry_has_a_specific_public_kind() -> None:
+    registry = DatasetProviderRegistry()
+    registry.register("external.memory", lambda options: object())  # type: ignore[arg-type]
+
+    with pytest.raises(
+        UnknownPluginError,
+        match=r"registered dataset provider names: external\.memory",
+    ):
+        registry.get("missing")

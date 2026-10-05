@@ -34,9 +34,12 @@ from roast.execution.item import (
     utc_now,
 )
 from roast.execution.policy import ExecutionPolicy
-from roast.plugins.registry import Registry, TaskKindRegistry
+from roast.plugins.registry import (
+    DatasetProviderRegistry,
+    Registry,
+    TaskKindRegistry,
+)
 from roast.plugins.errors import UnknownPluginError
-from roast.protocols.dataset import DatasetProvider
 from roast.protocols.hooks import ProgressHook, ResumeStore
 from roast.protocols.metric import Metric
 from roast.protocols.model import ModelAdapter
@@ -54,13 +57,17 @@ class PluginRegistries:
         tasks: Registered task adapter factories.
     """
 
-    datasets: Registry[DatasetProvider]
+    datasets: DatasetProviderRegistry
     models: Registry[ModelAdapter]
     metrics: Registry[Metric]
     tasks: TaskKindRegistry
 
     def __post_init__(self) -> None:
-        for field_name in ("datasets", "models", "metrics", "tasks"):
+        if not isinstance(self.datasets, DatasetProviderRegistry):
+            raise TypeError(
+                "PluginRegistries.datasets must be a DatasetProviderRegistry"
+            )
+        for field_name in ("models", "metrics", "tasks"):
             if not isinstance(getattr(self, field_name), Registry):
                 raise TypeError(f"PluginRegistries.{field_name} must be a Registry")
 

@@ -10,6 +10,7 @@ from roast.plugins.errors import (
     UnknownPluginError,
 )
 from roast.protocols.task import TaskAdapter
+from roast.protocols.dataset import DatasetProvider
 
 
 T = TypeVar("T")
@@ -62,3 +63,15 @@ class TaskKindRegistry(Registry[TaskAdapter]):
 
     def __init__(self) -> None:
         super().__init__("task kind")
+
+
+class DatasetProviderRegistry(Registry[DatasetProvider]):
+    """Map dataset provider names to factories.
+
+    Dataset options remain opaque to ROAST and are passed to the provider factory
+    as an immutable JSON mapping.  The returned provider receives the complete
+    :class:`~roast.core.config.DatasetSpec` when the suite is executed.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("dataset provider")

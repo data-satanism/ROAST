@@ -15,7 +15,7 @@ orchestrator lifecycle and execution policies are documented in
 
 | Extension | Public contract | Integration surface | Introduced |
 |---|---|---|---|
-| Dataset | `DatasetProvider` | `Registry[DatasetProvider]` | BMF-101 |
+| Dataset | `DatasetProvider` | `DatasetProviderRegistry` | BMF-103 |
 | Model | `ModelAdapter` | `Registry[ModelAdapter]` | BMF-101 |
 | Metric | `Metric` | `Registry[Metric]` | BMF-101 |
 | Task kind | `TaskAdapter` | `TaskKindRegistry` | BMF-101 |
@@ -29,7 +29,7 @@ registry:
 
 | Extension | Current registry | Current responsibility | Future work |
 |---|---|---|---|
-| Dataset | `Registry[DatasetProvider]` | BMF-101 defines only the provider contract | BMF-103 adds `DatasetProviderRegistry` |
+| Dataset | `DatasetProviderRegistry` | Provider name resolution and opaque provider options | BMF-103 implemented |
 | Model | `Registry[ModelAdapter]` | BMF-101 defines only the adapter contract | BMF-104 adds `ModelAdapterRegistry` |
 | Metric | `Registry[Metric]` | BMF-101 defines only the metric contract | BMF-105 adds `MetricRegistry` |
 | Task kind | `TaskKindRegistry` | An extensible task-kind registry is an explicit BMF-101 requirement | Already introduced by BMF-101 |
@@ -54,9 +54,13 @@ replace its common name-to-factory behavior.
 immutable `ReadonlyJSONObject` options and returns one Protocol implementation.
 
 ```python
-from roast.plugins.registry import Registry, TaskKindRegistry
+from roast.plugins.registry import (
+    DatasetProviderRegistry,
+    Registry,
+    TaskKindRegistry,
+)
 
-datasets = Registry("dataset provider")
+datasets = DatasetProviderRegistry()
 models = Registry("model adapter")
 metrics = Registry("metric")
 tasks = TaskKindRegistry()
@@ -80,8 +84,68 @@ class DatasetProvider(Protocol):
 ```
 
 `ItemRecord.payload`, `target`, and `metadata` are task-neutral and JSON-friendly.
-The provider owns interpretation of `PluginSpec.options`. Dataset discovery,
-provider-specific registries, and installable provider discovery belong to BMF-103.
+The provider owns interpretation of `PluginSpec.options`. ROAST passes those options
+to the registered factory as an immutable mapping, then passes the complete
+`DatasetSpec` to the provider's `load()` method.
+
+### Register a provider with the Python API
+
+A third-party package can implement and register a provider without modifying ROAST:
+
+```python
+from collections.abc import Iterable
+
+from roast.core.config import DatasetSpec
+from roast.core.records import ItemRecord
+from roast.core.schema import ReadonlyJSONObject
+from roast.plugins.registry import DatasetProviderRegistry
+
+
+class InlineDatasetProvider:
+    def __init__(self, options: ReadonlyJSONObject) -> None:
+        values = options.get("values", ())
+        self._values = tuple(values) if isinstance(values, tuple) else ()
+
+    def load(self, spec: DatasetSpec) -> Iterable[ItemRecord]:
+        for index, value in enumerate(self._values):
+            yield ItemRecord(
+                item_id=f"item-{index}",
+                dataset_id=spec.dataset_id,
+                payload=value,
+                target=value,
+            )
+
+
+datasets = DatasetProviderRegistry()
+datasets.register("example.inline", InlineDatasetProvider)
+```
+
+Select the provider by its registered name and pass provider-owned options through
+`PluginSpec`:
+
+```python
+from roast.core.config import DatasetSpec, PluginSpec
+
+dataset = DatasetSpec(
+    dataset_id="tiny",
+    provider=PluginSpec(
+        name="example.inline",
+        options={"values": [1, 2, 3]},
+    ),
+)
+```
+
+Pass this `DatasetProviderRegistry` in `PluginRegistries` when calling `run_suite`.
+The complete executable example is available in
+[`examples/custom_plugins.py`](../examples/custom_plugins.py).
+
+### Installable plugin discovery
+
+ROAST does not currently discover dataset providers from Python package entry points.
+In particular, declaring a `bmf.datasets` entry-point group does not register a
+provider automatically. Applications must import the third-party package and call
+`DatasetProviderRegistry.register()` explicitly, as shown above. This keeps plugin
+loading and registration order under application control.
 
 ## ModelAdapter
 

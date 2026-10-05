@@ -30,7 +30,7 @@ from roast.execution.errors import (
 from roast.execution.orchestrator import PluginRegistries, SuiteOrchestrator, run_suite
 from roast.execution.policy import ExecutionPolicy
 from roast.plugins.errors import UnknownPluginError
-from roast.plugins.registry import Registry, TaskKindRegistry
+from roast.plugins.registry import DatasetProviderRegistry, Registry, TaskKindRegistry
 from roast.protocols.dataset import DatasetProvider
 from roast.protocols.metric import Metric, MetricInput
 from roast.protocols.model import ModelAdapter
@@ -459,7 +459,7 @@ class InvalidErrorSink:
 
 
 def make_registries() -> PluginRegistries:
-    datasets: Registry[DatasetProvider] = Registry("dataset provider")
+    datasets = DatasetProviderRegistry()
     models: Registry[ModelAdapter] = Registry("model adapter")
     metrics: Registry[Metric] = Registry("metric")
     tasks = TaskKindRegistry()
