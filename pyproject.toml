@@ -6,8 +6,11 @@ requires-python = ">=3.10"
 [dependency-groups]
 dev = ["pytest>=8", "hypothesis>=6"]
 
+[project.optional-dependencies]
+parquet = ["pyarrow>=14"]
+
 [tool.setuptools.packages.find]
-include = ["roast", "roast.*"]
+include = ["roast", "roast.*", "examples", "examples.*"]
 
 [build-system]
 requires = ["setuptools>=69"]

@@ -45,8 +45,10 @@ ItemRecord(
 
 At the current contract stage, ROAST does not dereference this URI or prescribe an
 array format. The consumer-owned task adapter interprets the descriptor and converts
-the loaded value into the representation required by its model library. BMF-106
-will define the standard artifact layout and persistence behavior for these arrays.
+the loaded value into the representation required by its model library. The BMF-106
+layout persists this descriptor in `items.jsonl`; the externally referenced array
+remains consumer-owned and is not copied or dereferenced by `FileSystemRunStore`.
+See [`artifacts.md`](artifacts.md) for the portable run layout.
 
 ## Payload references and metadata
 

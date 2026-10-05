@@ -90,9 +90,10 @@ raise `SuiteExecutionError` with a partial result. A provider that fails while
 iterating may leave some items in that result. Setup failures are not checkpointed:
 the next attempt must load the complete item list again.
 
-ROAST does not impose an error filename or directory layout at this stage. To write
-an error artifact, enable both `ArtifactSpec.persist` and
-`ExecutionPolicy.persist_error_artifact`, then provide an `ErrorArtifactSink`:
+The backend-neutral `ErrorArtifactSink` remains available for custom storage. BMF-106
+also provides `FileSystemRunStore`, whose standard layout writes errors to
+`runs/<run-id>/errors.jsonl`. To use a custom sink, enable both
+`ArtifactSpec.persist` and `ExecutionPolicy.persist_error_artifact`:
 
 ```python
 class MyErrorSink:
@@ -106,9 +107,9 @@ class MyErrorSink:
         )
 ```
 
-The returned `ArtifactRecord` is included in the result manifest. BMF-106 will
-standardize the portable disk layout and incremental writers; BMF-102 only defines
-the sink boundary and when it is invoked.
+The returned `ArtifactRecord` is included in the result manifest. The standard
+filesystem implementation, complete layout, and interchange schema are documented
+in [`artifacts.md`](artifacts.md).
 The sink must return `kind="execution_errors"`. On resume, the orchestrator drops
 the previous error-artifact reference and writes a new one only when errors remain
 and persistence is enabled. Removing a previously written file is the sink owner's
@@ -149,8 +150,12 @@ terminal records.
 
 Successful, skipped, and unavailable pairs are not recomputed. Failed pairs are
 retried by default; set `retry_failed_on_resume=False` to retain them instead.
-The current store is consumer-owned and may be in-memory or file-backed. Portable
-atomic persistence is intentionally deferred to BMF-106.
+A store may still be consumer-owned and in-memory, while
+`FileSystemRunStore.from_artifact_spec(config.artifacts)` provides the standard
+atomic, file-backed implementation. It writes complete record files first and the
+resume checkpoint last. Set `ArtifactSpec.options={"parquet": True}` to add optional
+Parquet mirrors without changing the normative JSON checkpoint or resume behavior;
+see [`artifacts.md`](artifacts.md).
 
 ## Runnable example
 

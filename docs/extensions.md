@@ -400,17 +400,21 @@ class ErrorArtifactSink(Protocol):
     ) -> ArtifactRecord: ...
 ```
 
-These contracts do not prescribe logging backends, checkpoint storage, filenames,
-or URI layouts. Their invocation semantics and related policies are defined in
-[`execution.md`](execution.md). BMF-106 will define a portable, crash-safe on-disk
-checkpoint and artifact layout.
+These protocols remain backend-neutral and do not force a logging or storage
+implementation. Their invocation semantics and related policies are defined in
+[`execution.md`](execution.md). BMF-106 provides `FileSystemRunStore` as the
+standard atomic implementation and publishes its portable checkpoint and artifact
+layout in [`artifacts.md`](artifacts.md).
 
 ## Config, artifacts, and schema versions
 
 `BenchmarkSuiteConfig` is the single root configuration. Dataset, model, and metric
 specifications select plugins by registered names. `ArtifactSpec` is declarative;
-its `output_uri`, `persist`, and opaque options are passed to persistence extension
-points without prescribing a storage implementation.
+its `output_uri`, `persist`, and opaque options may be passed to custom persistence
+extensions or resolved by `FileSystemRunStore.from_artifact_spec()` for the standard
+BMF-106 layout. The store recognizes the optional boolean `parquet` option; when
+true, it lazily loads the `parquet` package extra and writes analytical Parquet
+mirrors alongside the normative JSONL streams.
 
 Every serialized public config, record, result, event, availability value, artifact
 record, and artifact manifest carries `schema_version: 1`. Readers reject a missing
