@@ -10,6 +10,8 @@ from roast.plugins.errors import (
 )
 from roast.plugins.registry import (
     DatasetProviderRegistry,
+    MetricDirection,
+    MetricRegistry,
     ModelAdapterRegistry,
     Registry,
     TaskKindRegistry,
@@ -86,3 +88,21 @@ def test_model_adapter_registry_has_a_specific_public_kind() -> None:
         match=r"registered model adapter names: external\.lazy_model",
     ):
         registry.get("missing")
+
+
+def test_metric_registry_exposes_direction_compatibility_and_aliases() -> None:
+    registry = MetricRegistry()
+    factory = lambda options: object()  # type: ignore[return-value]
+    registry.register(
+        "external.loss",
+        factory,
+        direction=MetricDirection.MINIMIZE,
+        task_kinds=("regression",),
+        aliases=("external.loss@1",),
+    )
+
+    assert registry.get("external.loss@1") is factory
+    assert registry.metadata("external.loss@1").direction is MetricDirection.MINIMIZE
+    registry.validate_task("external.loss", "regression")
+    with pytest.raises(RegistrationError, match="not compatible"):
+        registry.validate_task("external.loss", "classification")

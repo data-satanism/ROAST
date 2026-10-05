@@ -32,6 +32,7 @@ from roast.execution.policy import ExecutionPolicy
 from roast.plugins.errors import UnknownPluginError
 from roast.plugins.registry import (
     DatasetProviderRegistry,
+    MetricRegistry,
     ModelAdapterRegistry,
     Registry,
     TaskKindRegistry,
@@ -466,7 +467,7 @@ class InvalidErrorSink:
 def make_registries() -> PluginRegistries:
     datasets = DatasetProviderRegistry()
     models = ModelAdapterRegistry()
-    metrics: Registry[Metric] = Registry("metric")
+    metrics = MetricRegistry()
     tasks = TaskKindRegistry()
     datasets.register("toy.values", ValuesProvider)
     datasets.register("toy.ordered_values", OrderedValuesProvider)

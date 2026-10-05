@@ -18,6 +18,8 @@ from roast.core.schema import ReadonlyJSONObject
 from roast.execution.orchestrator import PluginRegistries, run_suite
 from roast.plugins.registry import (
     DatasetProviderRegistry,
+    MetricDirection,
+    MetricRegistry,
     ModelAdapterRegistry,
     Registry,
     TaskKindRegistry,
@@ -122,7 +124,7 @@ class NumericPredictionTask:
 def build_registries() -> tuple[
     DatasetProviderRegistry,
     ModelAdapterRegistry,
-    Registry[Metric],
+    MetricRegistry,
     TaskKindRegistry,
 ]:
     """Build registries populated with the example plugin factories.
@@ -133,12 +135,17 @@ def build_registries() -> tuple[
 
     datasets = DatasetProviderRegistry()
     models = ModelAdapterRegistry()
-    metrics: Registry[Metric] = Registry("metric")
+    metrics = MetricRegistry()
     tasks = TaskKindRegistry()
 
     datasets.register("example.inline_numbers", InlineNumbers)
     models.register("example.scale", ScaleModel)
-    metrics.register("example.absolute_error", AbsoluteError)
+    metrics.register(
+        "example.absolute_error",
+        AbsoluteError,
+        direction=MetricDirection.MINIMIZE,
+        task_kinds=("example.numeric_prediction",),
+    )
     tasks.register("example.numeric_prediction", NumericPredictionTask)
     return datasets, models, metrics, tasks
 

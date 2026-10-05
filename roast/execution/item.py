@@ -20,13 +20,14 @@ from roast.execution.errors import (
     _execution_error,
     record_id,
 )
+from roast.plugins.registry import MetricMetadata
 from roast.protocols.metric import Metric, MetricInput
 from roast.protocols.model import ModelAdapter
 from roast.protocols.task import ItemExecutionContext, PredictionOutput, TaskAdapter
 
 
 Clock = Callable[[], datetime]
-ResolvedMetric = tuple[MetricSpec, Metric]
+ResolvedMetric = tuple[MetricSpec, Metric, MetricMetadata]
 
 
 @dataclass(frozen=True)
@@ -207,7 +208,7 @@ def execute_item(
         "task_options": to_plain_data(context.options),
         "prediction_metadata": to_plain_data(output.metadata),
     }
-    for metric_spec, metric in metrics:
+    for metric_spec, metric, metric_metadata in metrics:
         metric_record_id = record_id(
             "metric",
             run_id,
@@ -235,6 +236,10 @@ def execute_item(
                     item_id=item.item_id,
                     metric_id=metric_spec.metric_id,
                     value=value,
+                    metadata={
+                        "registered_name": metric_metadata.name,
+                        "direction": metric_metadata.direction.value,
+                    },
                 )
             )
         except Exception as error:
@@ -258,7 +263,11 @@ def execute_item(
                     metric_id=metric_spec.metric_id,
                     value=None,
                     status=RunStatus.FAILED,
-                    metadata={"error_id": captured.error_id},
+                    metadata={
+                        "error_id": captured.error_id,
+                        "registered_name": metric_metadata.name,
+                        "direction": metric_metadata.direction.value,
+                    },
                 )
             )
 

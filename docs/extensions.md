@@ -17,26 +17,25 @@ orchestrator lifecycle and execution policies are documented in
 |---|---|---|---|
 | Dataset | `DatasetProvider` | `DatasetProviderRegistry` | BMF-103 |
 | Model | `ModelAdapter` | `ModelAdapterRegistry` | BMF-104 |
-| Metric | `Metric` | `Registry[Metric]` | BMF-101 |
+| Metric | `Metric` | `MetricRegistry` | BMF-105 |
 | Task kind | `TaskAdapter` | `TaskKindRegistry` | BMF-101 |
 | Progress | `ProgressHook` | Optional `run_suite` argument | BMF-102 |
 | Resume | `ResumeStore` | Optional `run_suite` argument | BMF-102 |
 | Error artifact | `ErrorArtifactSink` | Optional `run_suite` argument | BMF-102 |
 
 
-The current API has specialized registries for datasets and models, plus two uses
-of the generic registry:
+The current API has specialized registries for datasets, models, and metrics, plus
+one use of the generic registry:
 
 | Extension | Current registry | Current responsibility | Future work |
 |---|---|---|---|
 | Dataset | `DatasetProviderRegistry` | Provider name resolution and opaque provider options | BMF-103 implemented |
 | Model | `ModelAdapterRegistry` | Adapter name resolution and opaque adapter options | BMF-104 implemented |
-| Metric | `Registry[Metric]` | BMF-101 defines only the metric contract | BMF-105 adds `MetricRegistry` |
+| Metric | `MetricRegistry` | Name resolution, ranking direction, task compatibility, and aliases | BMF-105 implemented |
 | Task kind | `TaskKindRegistry` | An extensible task-kind registry is an explicit BMF-101 requirement | Already introduced by BMF-101 |
 
-This temporary API asymmetry is not a conceptual difference between the four plugin
-types. BMF-105 will complete the symmetric public surface by adding
-`MetricRegistry`:
+The four plugin types share the same name-to-factory registration model. Dataset,
+model, and metric registries add metadata or validation specific to their contract:
 
 ```python
 datasets = DatasetProviderRegistry()
@@ -56,6 +55,8 @@ immutable `ReadonlyJSONObject` options and returns one Protocol implementation.
 ```python
 from roast.plugins.registry import (
     DatasetProviderRegistry,
+    MetricDirection,
+    MetricRegistry,
     ModelAdapterRegistry,
     Registry,
     TaskKindRegistry,
@@ -63,12 +64,18 @@ from roast.plugins.registry import (
 
 datasets = DatasetProviderRegistry()
 models = ModelAdapterRegistry()
-metrics = Registry("metric")
+metrics = MetricRegistry()
 tasks = TaskKindRegistry()
 
 datasets.register("example.dataset", dataset_factory)
 models.register("example.model", model_factory)
-metrics.register("example.metric", metric_factory)
+metrics.register(
+    "example.metric",
+    metric_factory,
+    direction=MetricDirection.MINIMIZE,
+    task_kinds=("example.custom_task",),
+    aliases=("example.metric@1",),
+)
 tasks.register("example.custom_task", task_factory)
 ```
 
@@ -258,8 +265,82 @@ class Metric(Protocol):
 
 `MetricInput` exposes truth, prediction, the source item, the selected `MetricSpec`,
 and an explicit context mapping. The context leaves room for seasonality, anomaly
-windows, weights, and similar inputs without hidden globals. Metric direction,
-task compatibility, aliases, and the specialized registry belong to BMF-105.
+windows, weights, and similar inputs without hidden globals.
+
+### Register a metric with the Python API
+
+A third-party package implements the `Metric` protocol and registers a class or
+factory under a stable name:
+
+```python
+from roast.core.schema import ReadonlyJSONObject
+from roast.plugins.registry import MetricDirection, MetricRegistry
+from roast.protocols.metric import MetricInput
+
+
+class AbsoluteError:
+    def __init__(self, options: ReadonlyJSONObject) -> None:
+        pass
+
+    def compute(self, value: MetricInput) -> float:
+        return abs(float(value.truth) - float(value.prediction))
+
+
+metrics = MetricRegistry()
+metrics.register(
+    "example.absolute_error",
+    AbsoluteError,
+    direction=MetricDirection.MINIMIZE,
+    task_kinds=("example.numeric_prediction",),
+    aliases=("example.absolute_error@1",),
+)
+```
+
+Select the metric by its registered name or alias in `MetricSpec`:
+
+```python
+from roast.core.config import MetricSpec, PluginSpec
+
+metric = MetricSpec(
+    metric_id="absolute_error",
+    metric=PluginSpec("example.absolute_error@1"),
+)
+```
+
+Pass this `MetricRegistry` in `PluginRegistries` when calling `run_suite`. Unknown
+metric names raise `UnknownPluginError` and list the registered metric names.
+Task compatibility is validated before execution. The complete executable example
+is available in [`examples/custom_plugins.py`](../examples/custom_plugins.py).
+
+### Direction and result metadata
+
+Every registered metric declares whether ranking should minimize or maximize its
+value. Retrieve this information without constructing the metric:
+
+```python
+metadata = metrics.metadata("example.absolute_error")
+assert metadata.direction is MetricDirection.MINIMIZE
+```
+
+ROAST also writes the canonical metric name and direction into each successful or
+failed `MetricRecord.metadata` mapping. Artifact and ranking layers can therefore
+consume the direction without hard-coded task or metric-name switches.
+
+### Explicit metric context
+
+Metrics receive additional task information through `MetricInput.context`; they do
+not read hidden global state. The orchestrator supplies task kind, task options, and
+prediction metadata. A task-specific extension can use this mapping for values such
+as seasonality or anomaly windows while keeping the base metric protocol unchanged.
+
+### Standard metrics
+
+`roast.plugins.metrics.standard_metric_registry()` creates a dependency-free
+registry containing `accuracy`, `mae`, `rmse`, and `smape`. Each standard metric has
+an explicit direction, compatible task kinds, and a versioned `@1` alias. Advanced
+or domain-specific metrics remain consumer plugins rather than core dependencies.
+Property-based tests cover common reordering, equivalent singleton shapes, identity
+values, mismatched shapes, and rejection of NaN or infinite inputs.
 
 ## TaskAdapter
 

@@ -36,6 +36,7 @@ from roast.execution.item import (
 from roast.execution.policy import ExecutionPolicy
 from roast.plugins.registry import (
     DatasetProviderRegistry,
+    MetricRegistry,
     ModelAdapterRegistry,
     Registry,
     TaskKindRegistry,
@@ -61,7 +62,7 @@ class PluginRegistries:
 
     datasets: DatasetProviderRegistry
     models: ModelAdapterRegistry
-    metrics: Registry[Metric]
+    metrics: MetricRegistry
     tasks: TaskKindRegistry
 
     def __post_init__(self) -> None:
@@ -71,9 +72,10 @@ class PluginRegistries:
             )
         if not isinstance(self.models, ModelAdapterRegistry):
             raise TypeError("PluginRegistries.models must be a ModelAdapterRegistry")
-        for field_name in ("metrics", "tasks"):
-            if not isinstance(getattr(self, field_name), Registry):
-                raise TypeError(f"PluginRegistries.{field_name} must be a Registry")
+        if not isinstance(self.metrics, MetricRegistry):
+            raise TypeError("PluginRegistries.metrics must be a MetricRegistry")
+        if not isinstance(self.tasks, Registry):
+            raise TypeError("PluginRegistries.tasks must be a Registry")
 
 
 def _new_run_id(config: BenchmarkSuiteConfig) -> str:
@@ -204,6 +206,7 @@ class SuiteOrchestrator:
             self._registries.models.get(spec.adapter.name)
         for spec in config.metrics:
             self._registries.metrics.get(spec.metric.name)
+            self._registries.metrics.validate_task(spec.metric.name, config.task_kind)
         self._registries.tasks.get(config.task_kind)
 
     def _load_items(self, config: BenchmarkSuiteConfig) -> tuple[ItemRecord, ...]:
@@ -280,7 +283,9 @@ class SuiteOrchestrator:
                 raise _PluginSetupFailure(
                     error, "metric_factory", metric_id=spec.metric_id
                 ) from error
-            metrics.append((spec, metric))
+            metrics.append(
+                (spec, metric, self._registries.metrics.metadata(spec.metric.name))
+            )
         return task, tuple(metrics)
 
     def _load_checkpoint(
