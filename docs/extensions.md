@@ -1,38 +1,41 @@
-# BMF-101 extension points
+# Extension points
 
 ```text
 config -> registered plugin contracts -> orchestrator -> artifacts -> compare
                                       BMF-102       BMF-106      BMF-108
 ```
 
-BMF-101 defines the contracts across this mental model. It does not implement the
-suite lifecycle, persistence layout, or comparison algorithms.
+BMF-101 defines the dataset, model, metric, and task extension points. BMF-102 keeps
+those contracts and adds optional progress, resume, and error-artifact integration
+points around suite execution. This document describes extension contracts; the
+orchestrator lifecycle and execution policies are documented in
+[`execution.md`](execution.md).
 
 ## Extension catalog
 
-| Extension | Public Protocol | BMF-101 registration surface |
-|---|---|---|
-| Dataset | `DatasetProvider` | `Registry[DatasetProvider]` |
-| Model | `ModelAdapter` | `Registry[ModelAdapter]` |
-| Metric | `Metric` | `Registry[Metric]` |
-| Task kind | `TaskAdapter` | `TaskKindRegistry` |
-| Progress | `ProgressHook` | Optional Protocol only |
-| Resume | `ResumeStore` | Optional Protocol only |
-
-
-The current API intentionally has one specialized registry and three uses of the
-generic registry:
-
-| Extension | Current registry | Reason in the current PR | Future PR |
+| Extension | Public contract | Integration surface | Introduced |
 |---|---|---|---|
-| Dataset | `Registry[DatasetProvider]` | BMF-101 defines only the provider contract | BMF-103 adds `DatasetProviderRegistry` |
-| Model | `Registry[ModelAdapter]` | BMF-101 defines only the adapter contract | BMF-104 adds `ModelAdapterRegistry` |
-| Metric | `Registry[Metric]` | BMF-101 defines only the metric contract | BMF-105 adds `MetricRegistry` |
+| Dataset | `DatasetProvider` | `DatasetProviderRegistry` | BMF-103 |
+| Model | `ModelAdapter` | `ModelAdapterRegistry` | BMF-104 |
+| Metric | `Metric` | `MetricRegistry` | BMF-105 |
+| Task kind | `TaskAdapter` | `TaskKindRegistry` | BMF-101 |
+| Progress | `ProgressHook` | Optional `run_suite` argument | BMF-102 |
+| Resume | `ResumeStore` | Optional `run_suite` argument | BMF-102 |
+| Error artifact | `ErrorArtifactSink` | Optional `run_suite` argument | BMF-102 |
+
+
+The current API has specialized registries for datasets, models, and metrics, plus
+one use of the generic registry:
+
+| Extension | Current registry | Current responsibility | Future work |
+|---|---|---|---|
+| Dataset | `DatasetProviderRegistry` | Provider name resolution and opaque provider options | BMF-103 implemented |
+| Model | `ModelAdapterRegistry` | Adapter name resolution and opaque adapter options | BMF-104 implemented |
+| Metric | `MetricRegistry` | Name resolution, ranking direction, task compatibility, and aliases | BMF-105 implemented |
 | Task kind | `TaskKindRegistry` | An extensible task-kind registry is an explicit BMF-101 requirement | Already introduced by BMF-101 |
 
-This is a temporary PR-boundary asymmetry, not a conceptual difference between the
-four plugin types. The BMF-103, BMF-104, and BMF-105 PRs will restore a symmetric
-public surface:
+The four plugin types share the same name-to-factory registration model. Dataset,
+model, and metric registries add metadata or validation specific to their contract:
 
 ```python
 datasets = DatasetProviderRegistry()
@@ -41,8 +44,8 @@ metrics = MetricRegistry()
 tasks = TaskKindRegistry()
 ```
 
-The future specialized registries will reuse or extend `Registry[T]`; they will not
-replace its common name-to-factory behavior.
+The specialized registries reuse `Registry[T]`; they do not replace its common
+name-to-factory behavior.
 
 ## Generic registration
 
@@ -50,16 +53,29 @@ replace its common name-to-factory behavior.
 immutable `ReadonlyJSONObject` options and returns one Protocol implementation.
 
 ```python
-from roast.plugins.registry import Registry, TaskKindRegistry
+from roast.plugins.registry import (
+    DatasetProviderRegistry,
+    MetricDirection,
+    MetricRegistry,
+    ModelAdapterRegistry,
+    Registry,
+    TaskKindRegistry,
+)
 
-datasets = Registry("dataset provider")
-models = Registry("model adapter")
-metrics = Registry("metric")
+datasets = DatasetProviderRegistry()
+models = ModelAdapterRegistry()
+metrics = MetricRegistry()
 tasks = TaskKindRegistry()
 
 datasets.register("example.dataset", dataset_factory)
 models.register("example.model", model_factory)
-metrics.register("example.metric", metric_factory)
+metrics.register(
+    "example.metric",
+    metric_factory,
+    direction=MetricDirection.MINIMIZE,
+    task_kinds=("example.custom_task",),
+    aliases=("example.metric@1",),
+)
 tasks.register("example.custom_task", task_factory)
 ```
 
@@ -76,8 +92,68 @@ class DatasetProvider(Protocol):
 ```
 
 `ItemRecord.payload`, `target`, and `metadata` are task-neutral and JSON-friendly.
-The provider owns interpretation of `PluginSpec.options`. Dataset discovery,
-provider-specific registries, and installable provider discovery belong to BMF-103.
+The provider owns interpretation of `PluginSpec.options`. ROAST passes those options
+to the registered factory as an immutable mapping, then passes the complete
+`DatasetSpec` to the provider's `load()` method.
+
+### Register a provider with the Python API
+
+A third-party package can implement and register a provider without modifying ROAST:
+
+```python
+from collections.abc import Iterable
+
+from roast.core.config import DatasetSpec
+from roast.core.records import ItemRecord
+from roast.core.schema import ReadonlyJSONObject
+from roast.plugins.registry import DatasetProviderRegistry
+
+
+class InlineDatasetProvider:
+    def __init__(self, options: ReadonlyJSONObject) -> None:
+        values = options.get("values", ())
+        self._values = tuple(values) if isinstance(values, tuple) else ()
+
+    def load(self, spec: DatasetSpec) -> Iterable[ItemRecord]:
+        for index, value in enumerate(self._values):
+            yield ItemRecord(
+                item_id=f"item-{index}",
+                dataset_id=spec.dataset_id,
+                payload=value,
+                target=value,
+            )
+
+
+datasets = DatasetProviderRegistry()
+datasets.register("example.inline", InlineDatasetProvider)
+```
+
+Select the provider by its registered name and pass provider-owned options through
+`PluginSpec`:
+
+```python
+from roast.core.config import DatasetSpec, PluginSpec
+
+dataset = DatasetSpec(
+    dataset_id="tiny",
+    provider=PluginSpec(
+        name="example.inline",
+        options={"values": [1, 2, 3]},
+    ),
+)
+```
+
+Pass this `DatasetProviderRegistry` in `PluginRegistries` when calling `run_suite`.
+The complete executable example is available in
+[`examples/custom_plugins.py`](../examples/custom_plugins.py).
+
+### Installable plugin discovery
+
+ROAST does not currently discover dataset providers from Python package entry points.
+In particular, declaring a `bmf.datasets` entry-point group does not register a
+provider automatically. Applications must import the third-party package and call
+`DatasetProviderRegistry.register()` explicitly, as shown above. This keeps plugin
+loading and registration order under application control.
 
 ## ModelAdapter
 
@@ -91,9 +167,94 @@ are not universal. A task plugin declares its own structural capability, such as
 classifier with `fit/predict` or a forecaster with `forecast`, while still exposing
 the common availability contract.
 
-`ModelSpec.optional` is declarative in BMF-101. Uniform conversion of availability
-into skip/not-available records is implemented and tested in BMF-104 together with
-the specialized model registry.
+Availability gives the execution layer a task-neutral readiness signal. The
+task-specific protocol determines the actual operation shape, such as
+`predict_number()`, `predict()`, or `forecast()`.
+
+### Register an adapter with the Python API
+
+A third-party model package can implement the common availability contract and a
+capability required by its selected task kind. Register its class or factory under
+a stable name; no ROAST source changes are required:
+
+```python
+from roast.core.events import Availability
+from roast.core.records import ItemRecord
+from roast.core.schema import ReadonlyJSONObject
+from roast.plugins.registry import ModelAdapterRegistry
+
+
+class ScaleModel:
+    def __init__(self, options: ReadonlyJSONObject) -> None:
+        factor = options.get("factor", 1.0)
+        self._factor = float(factor)
+
+    def availability(self) -> Availability:
+        return Availability(available=True)
+
+    def predict_number(self, item: ItemRecord) -> float:
+        return float(item.payload) * self._factor
+
+
+models = ModelAdapterRegistry()
+models.register("example.scale", ScaleModel)
+```
+
+Select the registered adapter through `ModelSpec`. Adapter options remain owned by
+the third-party factory:
+
+```python
+from roast.core.config import ModelSpec, PluginSpec
+
+model = ModelSpec(
+    model_id="double",
+    adapter=PluginSpec(
+        name="example.scale",
+        options={"factor": 2},
+    ),
+    tags=("reference",),
+)
+```
+
+Pass this `ModelAdapterRegistry` in `PluginRegistries` when calling `run_suite`.
+The complete executable example is available in
+[`examples/custom_plugins.py`](../examples/custom_plugins.py).
+
+### Availability behavior
+
+Every model adapter returns an `Availability` value before item execution. ROAST
+uses one task-neutral mapping when `available` is false:
+
+| `ModelSpec.optional` | Run status |
+|---|---|
+| `True` | `skipped` |
+| `False` | `not_available` |
+
+The adapter should put a human-readable explanation in `Availability.reason`.
+Exceptions raised by the factory or `availability()` are recorded as failures, not
+as unavailable models.
+
+### Optional dependencies and lazy factories
+
+Registration accepts any callable with the same shape as a model constructor. A
+plugin can therefore defer an optional import until ROAST actually creates the
+selected adapter:
+
+```python
+from roast.core.schema import ReadonlyJSONObject
+
+
+def sklearn_factory(options: ReadonlyJSONObject):
+    from my_sklearn_plugin import SklearnAdapter
+
+    return SklearnAdapter(options)
+
+
+models.register("example.sklearn", sklearn_factory)
+```
+
+Keep optional imports inside the factory so importing the plugin registration
+module does not require every supported model library to be installed.
 
 ## Metric
 
@@ -104,8 +265,82 @@ class Metric(Protocol):
 
 `MetricInput` exposes truth, prediction, the source item, the selected `MetricSpec`,
 and an explicit context mapping. The context leaves room for seasonality, anomaly
-windows, weights, and similar inputs without hidden globals. Metric direction,
-task compatibility, aliases, and the specialized registry belong to BMF-105.
+windows, weights, and similar inputs without hidden globals.
+
+### Register a metric with the Python API
+
+A third-party package implements the `Metric` protocol and registers a class or
+factory under a stable name:
+
+```python
+from roast.core.schema import ReadonlyJSONObject
+from roast.plugins.registry import MetricDirection, MetricRegistry
+from roast.protocols.metric import MetricInput
+
+
+class AbsoluteError:
+    def __init__(self, options: ReadonlyJSONObject) -> None:
+        pass
+
+    def compute(self, value: MetricInput) -> float:
+        return abs(float(value.truth) - float(value.prediction))
+
+
+metrics = MetricRegistry()
+metrics.register(
+    "example.absolute_error",
+    AbsoluteError,
+    direction=MetricDirection.MINIMIZE,
+    task_kinds=("example.numeric_prediction",),
+    aliases=("example.absolute_error@1",),
+)
+```
+
+Select the metric by its registered name or alias in `MetricSpec`:
+
+```python
+from roast.core.config import MetricSpec, PluginSpec
+
+metric = MetricSpec(
+    metric_id="absolute_error",
+    metric=PluginSpec("example.absolute_error@1"),
+)
+```
+
+Pass this `MetricRegistry` in `PluginRegistries` when calling `run_suite`. Unknown
+metric names raise `UnknownPluginError` and list the registered metric names.
+Task compatibility is validated before execution. The complete executable example
+is available in [`examples/custom_plugins.py`](../examples/custom_plugins.py).
+
+### Direction and result metadata
+
+Every registered metric declares whether ranking should minimize or maximize its
+value. Retrieve this information without constructing the metric:
+
+```python
+metadata = metrics.metadata("example.absolute_error")
+assert metadata.direction is MetricDirection.MINIMIZE
+```
+
+ROAST also writes the canonical metric name and direction into each successful or
+failed `MetricRecord.metadata` mapping. Artifact and ranking layers can therefore
+consume the direction without hard-coded task or metric-name switches.
+
+### Explicit metric context
+
+Metrics receive additional task information through `MetricInput.context`; they do
+not read hidden global state. The orchestrator supplies task kind, task options, and
+prediction metadata. A task-specific extension can use this mapping for values such
+as seasonality or anomaly windows while keeping the base metric protocol unchanged.
+
+### Standard metrics
+
+`roast.plugins.metrics.standard_metric_registry()` creates a dependency-free
+registry containing `accuracy`, `mae`, `rmse`, and `smape`. Each standard metric has
+an explicit direction, compatible task kinds, and a versioned `@1` alias. Advanced
+or domain-specific metrics remain consumer plugins rather than core dependencies.
+Property-based tests cover common reordering, equivalent singleton shapes, identity
+values, mismatched shapes, and rejection of NaN or infinite inputs.
 
 ## TaskAdapter
 
@@ -121,19 +356,21 @@ class TaskAdapter(Protocol):
     ) -> PredictionOutput: ...
 ```
 
-`TaskAdapter` defines only one item's task-specific model invocation and output. It
-does not iterate a suite, create lifecycle records, compute every metric, checkpoint,
-persist artifacts, or assemble leaderboards. Those responsibilities belong to the
-generic orchestrator introduced in BMF-102.
+`TaskAdapter` defines one item's task-specific model invocation and output. Its
+extension boundary deliberately excludes suite-level concerns such as iteration,
+record assembly, checkpoints, and artifact persistence.
 
 The suite config selects the registered implementation using `task_kind` and passes
 opaque JSON `task_options` to its factory.
 
 See [`examples/custom_plugins.py`](../examples/custom_plugins.py) for a complete
-non-Industrial definition of all four mandatory extension types. It includes a
-consumer-owned `NumericModel` capability and requires no changes to ROAST source.
+definition of all four mandatory extension types. It includes a consumer-owned
+`NumericModel` capability and requires no changes to ROAST source.
 
-## Progress and resume hooks
+## BMF-102 lifecycle extension points
+
+The BMF-102 hooks are optional structural protocols. Consumers implement only the
+capabilities they need and pass those implementations to `run_suite`.
 
 `ProgressHook` consumes versioned `ProgressEvent` values:
 
@@ -150,16 +387,34 @@ class ResumeStore(Protocol):
     def save(self, run_id: str, state: ReadonlyJSONObject) -> None: ...
 ```
 
-BMF-101 defines only these optional boundaries. BMF-102 defines when lifecycle
-events and resume calls happen; BMF-106 defines portable, crash-safe checkpoint and
-artifact persistence.
+`ErrorArtifactSink` persists the aggregated error records and returns the artifact
+descriptor contributed to the result:
+
+```python
+class ErrorArtifactSink(Protocol):
+    def persist_errors(
+        self,
+        run_id: str,
+        errors: tuple[ExecutionError, ...],
+        spec: ArtifactSpec,
+    ) -> ArtifactRecord: ...
+```
+
+These protocols remain backend-neutral and do not force a logging or storage
+implementation. Their invocation semantics and related policies are defined in
+[`execution.md`](execution.md). BMF-106 provides `FileSystemRunStore` as the
+standard atomic implementation and publishes its portable checkpoint and artifact
+layout in [`artifacts.md`](artifacts.md).
 
 ## Config, artifacts, and schema versions
 
 `BenchmarkSuiteConfig` is the single root configuration. Dataset, model, and metric
 specifications select plugins by registered names. `ArtifactSpec` is declarative;
-its `output_uri`, `persist`, and opaque options do not imply that BMF-101 writes any
-files.
+its `output_uri`, `persist`, and opaque options may be passed to custom persistence
+extensions or resolved by `FileSystemRunStore.from_artifact_spec()` for the standard
+BMF-106 layout. The store recognizes the optional boolean `parquet` option; when
+true, it lazily loads the `parquet` package extra and writes analytical Parquet
+mirrors alongside the normative JSONL streams.
 
 Every serialized public config, record, result, event, availability value, artifact
 record, and artifact manifest carries `schema_version: 1`. Readers reject a missing

@@ -8,7 +8,14 @@ from roast.plugins.errors import (
     RegistrationError,
     UnknownPluginError,
 )
-from roast.plugins.registry import Registry, TaskKindRegistry
+from roast.plugins.registry import (
+    DatasetProviderRegistry,
+    MetricDirection,
+    MetricRegistry,
+    ModelAdapterRegistry,
+    Registry,
+    TaskKindRegistry,
+)
 
 
 def test_generic_registry_registers_and_creates_plugins() -> None:
@@ -59,3 +66,43 @@ def test_task_kind_registry_uses_arbitrary_string_names() -> None:
     task = registry.create("external.numeric_prediction", {})
 
     assert isinstance(task, NumericPredictionTask)
+
+
+def test_dataset_provider_registry_has_a_specific_public_kind() -> None:
+    registry = DatasetProviderRegistry()
+    registry.register("external.memory", lambda options: object())  # type: ignore[arg-type]
+
+    with pytest.raises(
+        UnknownPluginError,
+        match=r"registered dataset provider names: external\.memory",
+    ):
+        registry.get("missing")
+
+
+def test_model_adapter_registry_has_a_specific_public_kind() -> None:
+    registry = ModelAdapterRegistry()
+    registry.register("external.lazy_model", lambda options: object())  # type: ignore[arg-type]
+
+    with pytest.raises(
+        UnknownPluginError,
+        match=r"registered model adapter names: external\.lazy_model",
+    ):
+        registry.get("missing")
+
+
+def test_metric_registry_exposes_direction_compatibility_and_aliases() -> None:
+    registry = MetricRegistry()
+    factory = lambda options: object()  # type: ignore[return-value]
+    registry.register(
+        "external.loss",
+        factory,
+        direction=MetricDirection.MINIMIZE,
+        task_kinds=("regression",),
+        aliases=("external.loss@1",),
+    )
+
+    assert registry.get("external.loss@1") is factory
+    assert registry.metadata("external.loss@1").direction is MetricDirection.MINIMIZE
+    registry.validate_task("external.loss", "regression")
+    with pytest.raises(RegistrationError, match="not compatible"):
+        registry.validate_task("external.loss", "classification")

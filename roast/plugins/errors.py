@@ -8,3 +8,7 @@ class DuplicatePluginError(RegistrationError):
 
 class UnknownPluginError(LookupError):
     """Indicate that a requested plugin name is not registered."""
+
+
+class ManifestError(ValueError):
+    """Report an invalid or unresolved declarative manifest."""

@@ -1,0 +1,20 @@
+{
+  "run_id": "toy-fixture",
+  "task_kind": "classification",
+  "config": {
+    "task_kind":"classification",
+    "datasets":[{"dataset_id":"toy","provider":{"name":"toy.classification","options":{},"schema_version":1},"metadata":{},"schema_version":1}],
+    "models":[{"model_id":"majority","adapter":{"name":"toy.majority","options":{},"schema_version":1},"tags":[],"optional":false,"metadata":{},"schema_version":1}],
+    "metrics":[{"metric_id":"accuracy","metric":{"name":"accuracy","options":{},"schema_version":1},"schema_version":1}],
+    "artifacts":{"output_uri":"fixture","persist":true,"options":{},"schema_version":1},
+    "run":{"run_name":"fixture","random_seed":0,"primary_metric":"accuracy","resume_enabled":false,"resume_run_id":null,"options":{},"schema_version":1},
+    "task_options":{},"schema_version":1
+  },
+  "items": [{"item_id":"case","dataset_id":"toy","payload":{"train_labels":["red","red","blue"]},"target":"red","metadata":{},"schema_version":1}],
+  "runs": [{"record_id":"run-fixture","run_id":"toy-fixture","dataset_id":"toy","model_id":"majority","item_id":"case","status":"success","message":"","started_at":"2026-01-01T00:00:00Z","finished_at":"2026-01-01T00:00:00Z","metadata":{},"schema_version":1}],
+  "predictions": [{"record_id":"prediction-fixture","run_id":"toy-fixture","dataset_id":"toy","model_id":"majority","item_id":"case","prediction":"red","truth":"red","status":"success","coordinates":{},"metadata":{},"schema_version":1}],
+  "metrics": [{"record_id":"metric-fixture","run_id":"toy-fixture","dataset_id":"toy","model_id":"majority","item_id":"case","metric_id":"accuracy","value":1.0,"status":"success","coordinates":{},"metadata":{"registered_name":"accuracy","direction":"maximize"},"schema_version":1}],
+  "artifact_manifest": {"run_id":"toy-fixture","artifacts":[],"metadata":{},"schema_version":1},
+  "metadata": {"errors":[],"status_counts":{"success":1}},
+  "schema_version": 1
+}

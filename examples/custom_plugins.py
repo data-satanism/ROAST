@@ -15,7 +15,16 @@ from roast.core.config import (
 from roast.core.events import Availability
 from roast.core.records import ItemRecord
 from roast.core.schema import ReadonlyJSONObject
-from roast.plugins.registry import Registry, TaskKindRegistry
+from roast.execution.orchestrator import PluginRegistries, run_suite
+from roast.plugins.registry import (
+    DatasetProviderRegistry,
+    MetricDirection,
+    MetricRegistry,
+    ModelAdapterRegistry,
+    PresetRegistry,
+    Registry,
+    TaskKindRegistry,
+)
 from roast.protocols.dataset import DatasetProvider
 from roast.protocols.metric import Metric, MetricInput
 from roast.protocols.model import ModelAdapter
@@ -114,9 +123,9 @@ class NumericPredictionTask:
 
 
 def build_registries() -> tuple[
-    Registry[DatasetProvider],
-    Registry[ModelAdapter],
-    Registry[Metric],
+    DatasetProviderRegistry,
+    ModelAdapterRegistry,
+    MetricRegistry,
     TaskKindRegistry,
 ]:
     """Build registries populated with the example plugin factories.
@@ -125,14 +134,19 @@ def build_registries() -> tuple[
         Dataset, model, metric, and task registries for the example contracts.
     """
 
-    datasets: Registry[DatasetProvider] = Registry("dataset provider")
-    models: Registry[ModelAdapter] = Registry("model adapter")
-    metrics: Registry[Metric] = Registry("metric")
+    datasets = DatasetProviderRegistry()
+    models = ModelAdapterRegistry()
+    metrics = MetricRegistry()
     tasks = TaskKindRegistry()
 
     datasets.register("example.inline_numbers", InlineNumbers)
     models.register("example.scale", ScaleModel)
-    metrics.register("example.absolute_error", AbsoluteError)
+    metrics.register(
+        "example.absolute_error",
+        AbsoluteError,
+        direction=MetricDirection.MINIMIZE,
+        task_kinds=("example.numeric_prediction",),
+    )
     tasks.register("example.numeric_prediction", NumericPredictionTask)
     return datasets, models, metrics, tasks
 
@@ -176,11 +190,24 @@ def build_config(output_uri: str = "benchmark-results") -> BenchmarkSuiteConfig:
     )
 
 
-def main() -> None:
-    """Print the contract-only example configuration as JSON."""
+def register_presets(presets: PresetRegistry) -> None:
+    """Expose a consumer-owned preset to the generic manifest CLI."""
 
-    build_registries()
-    print(dumps(build_config()))
+    presets.register(
+        "example.tiny",
+        lambda options: build_config(str(options.get("output_uri", "benchmark-results"))),
+    )
+
+
+def main() -> None:
+    """Run the example and print its result as JSON."""
+
+    datasets, models, metrics, tasks = build_registries()
+    result = run_suite(
+        build_config(),
+        PluginRegistries(datasets, models, metrics, tasks),
+    )
+    print(dumps(result))
 
 
 if __name__ == "__main__":
