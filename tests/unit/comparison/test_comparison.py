@@ -1,4 +1,6 @@
 from dataclasses import replace
+import csv
+from io import StringIO
 import json
 
 from examples.custom_plugins import build_config, build_registries
@@ -40,6 +42,46 @@ def test_leaderboard_mean_ranks_and_comparison_table_are_stable() -> None:
     assert build_mean_ranks((first, second)) == (
         {"model_id": "double", "mean_rank": 1, "run_count": 2},
         {"model_id": "challenger", "mean_rank": 2, "run_count": 2},
+    )
+
+
+def test_leaderboard_csv_and_markdown_snapshots_have_stable_sorting() -> None:
+    rows = tuple(
+        {**row, "run_id": "<run-id>"}
+        for row in build_leaderboard(make_result(triple_factor=3, run_name="snapshot"))
+    )
+    columns = (
+        "run_id",
+        "model_id",
+        "metric_id",
+        "score",
+        "direction",
+        "observations",
+        "rank",
+    )
+
+    csv_output = StringIO()
+    writer = csv.DictWriter(csv_output, fieldnames=columns, lineterminator="\n")
+    writer.writeheader()
+    writer.writerows(rows)
+    assert csv_output.getvalue() == (
+        "run_id,model_id,metric_id,score,direction,observations,rank\n"
+        "<run-id>,double,absolute_error,0.0,minimize,3,1\n"
+        "<run-id>,challenger,absolute_error,2.0,minimize,3,2\n"
+    )
+
+    header = "| " + " | ".join(columns) + " |"
+    separator = "| " + " | ".join("---" for _ in columns) + " |"
+    body = [
+        "| " + " | ".join(str(row[column]) for column in columns) + " |"
+        for row in rows
+    ]
+    markdown = "\n".join((header, separator, *body)) + "\n"
+    assert markdown == (
+        "| run_id | model_id | metric_id | score | direction | observations | rank |\n"
+        "| --- | --- | --- | --- | --- | --- | --- |\n"
+        "| <run-id> | double | absolute_error | 0.0 | minimize | 3 | 1 |\n"
+        "| <run-id> | challenger | absolute_error | 2.0 | minimize | 3 | 2 |\n"
     )
 
 

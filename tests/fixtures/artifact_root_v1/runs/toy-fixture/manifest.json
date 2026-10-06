@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "run_id": "toy-fixture",
+  "files": [
+    {"path":"config.json","media_type":"application/json","sha256":"cf4acd2a02b83ac7e119d96b6a9ff49f5417042df9c02e56239a5accf01b771d"},
+    {"path":"errors.jsonl","media_type":"application/x-ndjson","sha256":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
+    {"path":"items.jsonl","media_type":"application/x-ndjson","sha256":"90dd10ba24057f66a11171deb66ebd876870941013608bdf037e157d6fcb1024"},
+    {"path":"records/metrics.jsonl","media_type":"application/x-ndjson","sha256":"62857671931d26316945194e7f360aeb7a5fc306108d3beb619a9b1c11ee279e"},
+    {"path":"records/predictions.jsonl","media_type":"application/x-ndjson","sha256":"fb241f8b1163b70edef9c643a2d4e9fb1debdebf620a2f407020e8f556739b06"},
+    {"path":"records/runs.jsonl","media_type":"application/x-ndjson","sha256":"223a9048b37932301e6656eb0b5406fc1d361ac4e57a108d11e7dd71635fd84f"},
+    {"path":"run_metadata.json","media_type":"application/json","sha256":"3b27d16d4a3ba024ecd1feef35172f6270ebd240e71f0650b40ab97f0ec846e7"}
+  ]
+}

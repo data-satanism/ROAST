@@ -4,9 +4,18 @@ import json
 from dataclasses import replace
 
 import pytest
+from hypothesis import given, strategies as st
 
 from examples.custom_plugins import build_config
-from roast.core.config import BenchmarkSuiteConfig, PluginSpec, RunSpec
+from roast.core.config import (
+    ArtifactSpec,
+    BenchmarkSuiteConfig,
+    DatasetSpec,
+    MetricSpec,
+    ModelSpec,
+    PluginSpec,
+    RunSpec,
+)
 from roast.core.events import Availability, ProgressEvent
 from roast.core.records import (
     ArtifactManifest,
@@ -84,6 +93,67 @@ def test_config_is_versioned_and_json_round_trips() -> None:
     assert payload["datasets"][0]["provider"]["schema_version"] == SCHEMA_VERSION
     assert payload["artifacts"]["output_uri"] == "benchmark-results"
     assert restored == config
+
+
+@given(
+    suffix=st.text(
+        alphabet=st.characters(whitelist_categories=("Ll", "Lu", "Nd")),
+        min_size=1,
+        max_size=12,
+    ),
+    seed=st.integers(min_value=0, max_value=2**31 - 1),
+    optional=st.booleans(),
+    tags=st.lists(
+        st.text(
+            alphabet=st.characters(whitelist_categories=("Ll", "Lu", "Nd")),
+            min_size=1,
+            max_size=8,
+        ),
+        max_size=4,
+        unique=True,
+    ),
+)
+def test_suite_config_property_round_trip(
+    suffix: str,
+    seed: int,
+    optional: bool,
+    tags: list[str],
+) -> None:
+    config = BenchmarkSuiteConfig(
+        task_kind=f"task.{suffix}",
+        datasets=(
+            DatasetSpec(
+                f"dataset-{suffix}",
+                PluginSpec(f"provider.{suffix}", {"seed": seed}),
+            ),
+        ),
+        models=(
+            ModelSpec(
+                f"model-{suffix}",
+                PluginSpec(f"adapter.{suffix}", {"optional": optional}),
+                tags=tuple(tags),
+                optional=optional,
+            ),
+        ),
+        metrics=(
+            MetricSpec(
+                f"metric-{suffix}",
+                PluginSpec(f"metric.{suffix}"),
+            ),
+        ),
+        artifacts=ArtifactSpec(f"results/{suffix}", persist=not optional),
+        run=RunSpec(
+            run_name=f"run-{suffix}",
+            random_seed=seed,
+            primary_metric=f"metric-{suffix}",
+        ),
+        task_options={"optional": optional, "tags": tags},
+    )
+
+    payload = json.loads(dumps(config))
+
+    assert BenchmarkSuiteConfig.from_dict(payload) == config
+    assert json.loads(dumps(BenchmarkSuiteConfig.from_dict(payload))) == payload
 
 
 @pytest.mark.parametrize("field_name", ("datasets", "models", "metrics"))

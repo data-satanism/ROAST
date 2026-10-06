@@ -1,0 +1,1 @@
+{"coordinates":{},"dataset_id":"toy","item_id":"case","metadata":{"direction":"maximize","registered_name":"accuracy"},"metric_id":"accuracy","model_id":"majority","record_id":"metric-fixture","run_id":"toy-fixture","schema_version":1,"status":"success","value":1.0}

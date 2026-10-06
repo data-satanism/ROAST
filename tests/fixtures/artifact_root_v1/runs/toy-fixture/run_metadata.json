@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "run_id": "toy-fixture",
+  "run_name": "fixture",
+  "task_kind": "classification",
+  "state": "completed",
+  "updated_at": "2026-01-01T00:00:00Z",
+  "counts": {"items": 1, "runs": 1, "predictions": 1, "metrics": 1, "errors": 0}
+}
