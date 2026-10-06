@@ -1,0 +1,8 @@
+{
+  "format": "roast_manifest@1",
+  "schema_version": 1,
+  "preset": "toy.classification",
+  "preset_options": {
+    "output_uri": "benchmark-results"
+  }
+}

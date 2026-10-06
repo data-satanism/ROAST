@@ -1,0 +1,8 @@
+{
+  "format": "roast_manifest@1",
+  "schema_version": 1,
+  "preset": "toy.forecasting",
+  "preset_options": {
+    "output_uri": "benchmark-results"
+  }
+}
