@@ -14,6 +14,7 @@ from roast.core.schema import (
     integer_value,
     object_value,
     optional_string,
+    reject_unknown_fields,
     require_schema_version,
     require_string,
     _frozen_object,
@@ -48,6 +49,11 @@ class PluginSpec(SchemaMixin):
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PluginSpec":
+        reject_unknown_fields(
+            data,
+            {"name", "options", "schema_version"},
+            schema_name="PluginSpec",
+        )
         return cls(
             name=require_string(data, "name", schema_name="PluginSpec"),
             options=object_value(data, "options", schema_name="PluginSpec"),
@@ -84,6 +90,11 @@ class DatasetSpec(SchemaMixin):
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "DatasetSpec":
+        reject_unknown_fields(
+            data,
+            {"dataset_id", "provider", "metadata", "schema_version"},
+            schema_name="DatasetSpec",
+        )
         provider = _mapping(data.get("provider"), path="DatasetSpec.provider")
         return cls(
             dataset_id=require_string(data, "dataset_id", schema_name="DatasetSpec"),
@@ -132,6 +143,11 @@ class ModelSpec(SchemaMixin):
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ModelSpec":
+        reject_unknown_fields(
+            data,
+            {"model_id", "adapter", "tags", "optional", "metadata", "schema_version"},
+            schema_name="ModelSpec",
+        )
         adapter = _mapping(data.get("adapter"), path="ModelSpec.adapter")
         tags = array_value(data, "tags", schema_name="ModelSpec")
         if any(not isinstance(tag, str) for tag in tags):
@@ -168,6 +184,11 @@ class MetricSpec(SchemaMixin):
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "MetricSpec":
+        reject_unknown_fields(
+            data,
+            {"metric_id", "metric", "schema_version"},
+            schema_name="MetricSpec",
+        )
         metric = _mapping(data.get("metric"), path="MetricSpec.metric")
         return cls(
             metric_id=require_string(data, "metric_id", schema_name="MetricSpec"),
@@ -219,6 +240,19 @@ class RunSpec(SchemaMixin):
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "RunSpec":
+        reject_unknown_fields(
+            data,
+            {
+                "run_name",
+                "random_seed",
+                "primary_metric",
+                "resume_enabled",
+                "resume_run_id",
+                "options",
+                "schema_version",
+            },
+            schema_name="RunSpec",
+        )
         return cls(
             run_name=_string_default(data, "run_name", schema_name="RunSpec", default="benchmark"),
             random_seed=integer_value(data, "random_seed", schema_name="RunSpec", default=0),
@@ -261,6 +295,11 @@ class ArtifactSpec(SchemaMixin):
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ArtifactSpec":
+        reject_unknown_fields(
+            data,
+            {"output_uri", "persist", "options", "schema_version"},
+            schema_name="ArtifactSpec",
+        )
         return cls(
             output_uri=require_string(data, "output_uri", schema_name="ArtifactSpec"),
             persist=boolean_value(data, "persist", schema_name="ArtifactSpec", default=True),
@@ -342,6 +381,20 @@ class BenchmarkSuiteConfig(SchemaMixin):
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "BenchmarkSuiteConfig":
+        reject_unknown_fields(
+            data,
+            {
+                "task_kind",
+                "datasets",
+                "models",
+                "metrics",
+                "artifacts",
+                "run",
+                "task_options",
+                "schema_version",
+            },
+            schema_name="BenchmarkSuiteConfig",
+        )
         datasets = array_value(data, "datasets", schema_name="BenchmarkSuiteConfig", required=True)
         models = array_value(data, "models", schema_name="BenchmarkSuiteConfig", required=True)
         metrics = array_value(data, "metrics", schema_name="BenchmarkSuiteConfig", required=True)

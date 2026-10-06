@@ -21,6 +21,7 @@ from roast.plugins.registry import (
     MetricDirection,
     MetricRegistry,
     ModelAdapterRegistry,
+    PresetRegistry,
     Registry,
     TaskKindRegistry,
 )
@@ -186,6 +187,15 @@ def build_config(output_uri: str = "benchmark-results") -> BenchmarkSuiteConfig:
         ),
         artifacts=ArtifactSpec(output_uri=output_uri, persist=False),
         run=RunSpec(run_name="custom", primary_metric="absolute_error"),
+    )
+
+
+def register_presets(presets: PresetRegistry) -> None:
+    """Expose a consumer-owned preset to the generic manifest CLI."""
+
+    presets.register(
+        "example.tiny",
+        lambda options: build_config(str(options.get("output_uri", "benchmark-results"))),
     )
 
 

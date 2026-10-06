@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from dataclasses import fields, is_dataclass
 from enum import Enum
 from types import MappingProxyType
@@ -23,6 +23,21 @@ ReadonlyJSONObject: TypeAlias = Mapping[str, ReadonlyJSONValue]
 
 class SchemaError(ValueError):
     """Raised when public data does not conform to the ROAST JSON schema."""
+
+
+def reject_unknown_fields(
+    data: Mapping[str, Any],
+    allowed: Collection[str],
+    *,
+    schema_name: str,
+) -> None:
+    """Reject misspelled or unsupported fields in a serialized schema object."""
+
+    unknown = sorted(set(data).difference(allowed))
+    if unknown:
+        raise SchemaError(
+            f"Unknown {schema_name} fields: {', '.join(unknown)}"
+        )
 
 
 def ensure_schema_version(value: object, *, schema_name: str) -> None:

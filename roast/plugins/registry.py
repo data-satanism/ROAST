@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Generic, TypeVar, cast
 
+from roast.core.config import BenchmarkSuiteConfig
 from roast.core.schema import ReadonlyJSONObject, freeze_json_value
 from roast.plugins.errors import (
     DuplicatePluginError,
@@ -67,6 +68,13 @@ class TaskKindRegistry(Registry[TaskAdapter]):
 
     def __init__(self) -> None:
         super().__init__("task kind")
+
+
+class PresetRegistry(Registry[BenchmarkSuiteConfig]):
+    """Map consumer-defined preset names to suite-config factories."""
+
+    def __init__(self) -> None:
+        super().__init__("preset")
 
 
 class DatasetProviderRegistry(Registry[DatasetProvider]):
